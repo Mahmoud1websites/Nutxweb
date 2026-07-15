@@ -4,7 +4,7 @@ import { Minus, Plus, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../config/supabaseClient";
 
-const API_BASE = "/api";
+const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
 function getSessionId(): string {
   let id = localStorage.getItem("x-session-id");

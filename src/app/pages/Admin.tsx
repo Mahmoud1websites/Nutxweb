@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 /* ─── API helper ─────────────────────────────────────────────────────────── */
 
-const API = "/api";
+const API = import.meta.env.VITE_API_BASE || "/api";
 
 async function apiFetch(path: string, opts: RequestInit = {}) {
   const { data } = await supabase.auth.getSession();

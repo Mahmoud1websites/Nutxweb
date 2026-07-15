@@ -7,7 +7,7 @@ import { useStore } from "../store";
 import { supabase } from "../config/supabaseClient";
 import { useLanguage } from "../i18n/LanguageContext";
 
-const API_BASE = "/api";
+const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
 // Turns a raw gram count into a friendly label: 250 -> "250g", 1000 -> "1kg", 1500 -> "1.5kg"
 function formatWeight(grams: number): string {

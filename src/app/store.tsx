@@ -226,7 +226,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<any | null>(null);
   const [loading, setLoading] = React.useState(true);
 
-  const api = axios.create({ baseURL: "/api" });
+  const api = axios.create({ baseURL: import.meta.env.VITE_API_BASE || "/api" });
   api.interceptors.request.use(async (config) => {
     const { data } = await supabase.auth.getSession();
     if (data.session?.access_token) {
