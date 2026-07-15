@@ -290,7 +290,7 @@ export default function ProductDetail() {
 
     setSubmittingReview(true);
     try {
-      const res = await fetch("/api/reviews", {
+      const res = await fetch(`${API_BASE}/reviews`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -310,7 +310,7 @@ export default function ProductDetail() {
 
 
 
-      const updated = await fetch(`/api/products/${slug}`).then(r => r.json());
+      const updated = await fetch(`${API_BASE}/products/${slug}`).then(r => r.json());
       if (updated.success) setProduct(updated.product);
     } catch (err: any) {
       toast.error(err.message || t("pd_review_failed"));

@@ -20,7 +20,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 
 const image = new URL("../../assets/back2.jpg.png", import.meta.url).href;
 const images = new URL("../../assets/whychoose2.png", import.meta.url).href;
-
+const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 const brands = [
   "Lindt", "Ferrero", "Godiva", "Nutella", "Blue Diamond",
   "Planters", "Lindor", "Toblerone", "Kinder", "Ritter Sport",
@@ -60,11 +60,11 @@ export default function Home() {
   const [categories, setCategories] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("/api/products?limit=100")
+    fetch(`${API_BASE}/products?limit=100`)
       .then(r => r.json())
       .then(d => setApiProducts(d.products || []));
 
-    fetch("/api/categories")
+    fetch(`${API_BASE}/categories`)
       .then(r => r.json())
       .then(d => setCategories(d.categories || []));
   }, []);
@@ -144,7 +144,7 @@ export default function Home() {
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
-               to="/products?category=Nuts+%26+Mixes"
+                to="/products?category=Nuts+%26+Mixes"
                 className="inline-flex items-center gap-2 bg-transparent text-foreground font-semibold px-7 py-3.5 rounded-xl border border-border hover:bg-muted transition-colors text-sm"
               >
                 {t("hero_cta_nuts_mixes")}
@@ -292,7 +292,7 @@ export default function Home() {
           <div className="grid lg:grid-cols-2 gap-12 items-start">
             <div className="relative rounded-3xl overflow-hidden aspect-[4/5] lg:aspect-auto lg:h-full min-h-[420px]">
               <img
-              src={images}
+                src={images}
                 alt="NUTX store — premium nuts and chocolate"
                 className="w-full h-full object-cover"
               />

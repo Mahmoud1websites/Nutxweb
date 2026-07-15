@@ -387,7 +387,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function fetchInventory() {
       try {
-        const res = await fetch("/api/products?limit=100");
+   const res = await fetch(`${import.meta.env.VITE_API_BASE || "/api"}/products?limit=100`);
         const result = await res.json();
         if (Array.isArray(result)) {
           setDbProducts(result);
