@@ -19,19 +19,6 @@ import { supabase } from "../config/supabaseClient";
 
 const API_BASE_URL = "http://localhost:5000/api";
 
-function getToken() {
-  // Replace 'sb-yourprojectid-auth-token' with the exact key name found in your devtools
-  const supabaseSessionRaw = localStorage.getItem("sb-yourprojectid-auth-token");
-  if (!supabaseSessionRaw) return "";
-
-  try {
-    const session = JSON.parse(supabaseSessionRaw);
-    return session?.access_token || "";
-  } catch (e) {
-    return "";
-  }
-}
-
 interface Address {
   id: string;
   full_name: string;
@@ -54,7 +41,8 @@ interface ShippingMethod {
 }
 
 const STEP_LABELS = ["Shipping", "Payment", "Review"];
-const emptyAddress = {
+
+const emptyAddress: Omit<Address, "id"> & { [key: string]: any } = {
   full_name: "",
   phone: "",
   street: "",
@@ -96,15 +84,15 @@ export default function Checkout() {
   const [couponInput, setCouponInput] = useState("");
   const [couponError, setCouponError] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
-  const [appliedCouponId, setAppliedCouponId] = useState<string | null>(null);
 
   // ── Notes ──
   const [notes, setNotes] = useState("");
 
-  // Redirect if not logged in or cart empty
   useEffect(() => {
     if (!user) { navigate("/login"); return; }
-    if (!state.cart || state.cart.length === 0) { navigate("/cart"); return; }
+    const hasProducts = state.cart && state.cart.length > 0;
+    const hasGiftBoxes = state.giftBoxCart && state.giftBoxCart.length > 0;
+    if (!hasProducts && !hasGiftBoxes) { navigate("/cart"); return; }
     fetchAddresses();
     fetchShippingMethods();
   }, [user]);
@@ -112,14 +100,13 @@ export default function Checkout() {
   async function fetchAddresses() {
     setLoadingAddresses(true);
     try {
-      // Retrieve the latest session directly from Supabase
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
 
       const res = await fetch(`${API_BASE_URL}/addresses`, {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}` // Use the dynamic token
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -143,14 +130,12 @@ export default function Checkout() {
   async function fetchShippingMethods() {
     setLoadingShipping(true);
     try {
-      // 1. Get the session token
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
 
-      // 2. Fetch with the Authorization header
       const res = await fetch(`${API_BASE_URL}/shipping-methods`, {
         headers: {
-          Authorization: `Bearer ${token}`, // Crucial for authorized access
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -159,9 +144,7 @@ export default function Checkout() {
       }
 
       const data = await res.json();
-      console.log("Shipping Methods Data:", data);
 
-      // 3. Update state based on your API structure
       if (data.success) {
         setShippingMethods(data.shippingMethods || []);
         if (data.shippingMethods?.length > 0) {
@@ -170,7 +153,6 @@ export default function Checkout() {
       } else {
         throw new Error(data.message || "Failed to load shipping methods");
       }
-
     } catch (err) {
       console.error("Fetch Shipping Error:", err);
       toast.error("Could not load shipping options");
@@ -179,19 +161,6 @@ export default function Checkout() {
     }
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-  // 2. Modify handleSaveNewAddress to get the token directly from the Supabase session
   async function handleSaveNewAddress() {
     if (!newAddress.full_name || !newAddress.street || !newAddress.city) {
       toast.error("Please fill in required fields");
@@ -200,7 +169,6 @@ export default function Checkout() {
 
     setSavingAddress(true);
     try {
-      // Dynamically retrieve the current valid access token from Supabase
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
 
@@ -208,7 +176,7 @@ export default function Checkout() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`, // Pass the active token here
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(newAddress),
       });
@@ -228,36 +196,20 @@ export default function Checkout() {
     }
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   async function handleApplyCoupon() {
     const code = couponInput.trim().toUpperCase();
     if (!code) return;
     setCouponLoading(true);
     setCouponError("");
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
+
       const res = await fetch(`${API_BASE_URL}/coupons/validate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ code, orderSubtotal: cartSubtotal }),
       });
@@ -266,9 +218,12 @@ export default function Checkout() {
         setCouponError(data.error || "Invalid coupon");
         return;
       }
-      // Apply to store
-      dispatch({ type: "SET_COUPON", code: data.coupon.code });
-      setAppliedCouponId(data.coupon.id);
+
+      const rate = data.coupon.discountType === "percentage"
+        ? data.coupon.discountValue / 100
+        : data.coupon.discountValue / cartSubtotal;
+
+      dispatch({ type: "SET_COUPON", code: data.coupon.code, rate, couponId: data.coupon.id });
       setCouponInput("");
       toast.success(`Coupon applied — ${data.coupon.discountType === "percentage"
         ? `${data.coupon.discountValue}% off`
@@ -281,12 +236,10 @@ export default function Checkout() {
   }
 
   function handleRemoveCoupon() {
-    dispatch({ type: "SET_COUPON", code: null });
-    setAppliedCouponId(null);
+    dispatch({ type: "SET_COUPON", code: null, rate: 0, couponId: null });
     setCouponError("");
   }
 
-  // Resolved cart items for review
   const resolvedItems = useMemo(() => {
     const available = products || [];
     return (state.cart || []).map((item) => {
@@ -305,86 +258,76 @@ export default function Checkout() {
     });
   }, [state.cart, products]);
 
+  const resolvedGiftBoxItems = useMemo(() => {
+    return (state.giftBoxCart || []).map((box) => ({
+      itemId: box.itemId,
+      name: box.name,
+      image: box.image,
+      quantity: box.quantity,
+      price: box.basePrice,
+      contentsLabel: box.contents.map((c) => `${c.productName ?? "Item"} ×${c.quantity}`).join(", "),
+    }));
+  }, [state.giftBoxCart]);
+
   const selectedShipping = shippingMethods.find((m) => m.id === selectedShippingId);
   const shippingCost = selectedShipping ? parseFloat(selectedShipping.price) : 0;
   const orderTotal = cartSubtotal - discount + shippingCost;
 
   async function handlePlaceOrder() {
-     if (!selectedAddressId) { toast.error("Please select a delivery address"); return; }
-  if (!selectedShippingId) { toast.error("Please select a shipping method"); return; }
+    if (!selectedAddressId) { toast.error("Please select a delivery address"); return; }
+    if (!selectedShippingId) { toast.error("Please select a shipping method"); return; }
 
-   setPlacing(true);
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token || "";
-    if (!token) throw new Error("You must be logged in to place an order.");
+    const hasProducts = state.cart && state.cart.length > 0;
+    const hasGiftBoxes = state.giftBoxCart && state.giftBoxCart.length > 0;
+    if (!hasProducts && !hasGiftBoxes) {
+      toast.error("Your cart is empty. Please add items before checking out.");
+      return;
+    }
+
+    if (!state.cartId) {
+      toast.error("We couldn't find your cart. Please refresh and try again.");
+      return;
+    }
+
+    setPlacing(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
+      if (!token) throw new Error("You must be logged in to place an order.");
 
       const res = await fetch(`${API_BASE_URL}/checkout/place-order`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        shippingAddressId: selectedAddressId,
-        shippingMethodId: selectedShippingId,
-        couponId: appliedCouponId || null,
-        paymentMethod,
-        paymentDetails: paymentMethod === "card" ? { cardName, cardExpiry } : null,
-        notes: notes || null,
-        // Pass cart items directly from local state
-        cartItems: state.cart,
-      }),
-    });
-
-
-
-
-     
-
-      // 1. Fetch Cart
-      const cartRes = await fetch(`${API_BASE_URL}/cart`, {
-        headers: { Authorization: `Bearer ${token}` },
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          cartId: state.cartId,
+          shippingAddressId: selectedAddressId,
+          shippingMethodId: selectedShippingId,
+          couponId: state.couponId || null,
+          paymentMethod,
+          paymentIntentId: null,
+          notes: notes || null,
+        }),
       });
 
-      // Handle HTTP errors first
-      if (!cartRes.ok) {
-        const errorText = await cartRes.text();
-        console.error("Cart API Error Response:", errorText);
-        throw new Error("Failed to reach cart server.");
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        // Fallback for non-JSON returns
       }
 
-      const cartData = await cartRes.json();
-      console.log("Cart API Raw Response:", cartData);
-
-      // 1. Check if the API call was successful
-      if (!cartData.success) {
-        throw new Error("Could not retrieve your cart. Please refresh.");
+      if (!res.ok || !data?.success) {
+        const serverMessage = data?.error || `Order failed (status ${res.status})`;
+        console.error("Place order failed:", serverMessage);
+        throw new Error(serverMessage);
       }
 
-      if (!cartData.items || cartData.items.length === 0) {
-        toast.error("Your cart is empty. Please add items before checking out.");
-        setPlacing(false); // Stop the loading state
-        return; // Stop the execution of this function gracefully
-      }
-
-      // 3. Only proceed if we actually have items
-      const cartId = cartData.cartId;
-      // ... proceed to place order ...
-
-
-      // 4. Place Order
-     
-
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Order failed");
-
-      // 5. Success
       dispatch({ type: "CLEAR_CART" });
-      dispatch({ type: "SET_COUPON", code: null });
       toast.success("Order placed successfully!");
       navigate(`/order-success?id=${data.orderId}`);
-
     } catch (err: any) {
       console.error("Order error:", err);
       toast.error(err.message || "Something went wrong");
@@ -474,6 +417,7 @@ export default function Checkout() {
                     {addresses.map((addr) => (
                       <button
                         key={addr.id}
+                        type="button"
                         onClick={() => setSelectedAddressId(addr.id)}
                         className={`w-full text-left p-4 rounded-xl border-2 transition-all ${selectedAddressId === addr.id
                           ? "border-primary bg-primary/5"
@@ -519,7 +463,7 @@ export default function Checkout() {
                   <div className="mt-4 pt-4 border-t border-border">
                     <div className="flex items-center justify-between mb-4">
                       <p className="font-semibold text-sm text-foreground">Add New Address</p>
-                      <button onClick={() => setShowNewAddress(false)} className="text-muted-foreground hover:text-foreground">
+                      <button type="button" onClick={() => setShowNewAddress(false)} className="text-muted-foreground hover:text-foreground">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -537,7 +481,7 @@ export default function Checkout() {
                           <label className="block text-xs font-semibold text-muted-foreground mb-1">{label}</label>
                           <input
                             type={type || "text"}
-                            value={newAddress[key as keyof typeof newAddress] as string}
+                            value={newAddress[key] as string}
                             onChange={(e) => setNewAddress({ ...newAddress, [key]: e.target.value })}
                             className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
                           />
@@ -557,6 +501,7 @@ export default function Checkout() {
                     </div>
                     <div className="flex gap-2 mt-4">
                       <button
+                        type="button"
                         onClick={handleSaveNewAddress}
                         disabled={savingAddress}
                         className="flex items-center gap-2 bg-primary text-primary-foreground text-sm font-bold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-60"
@@ -565,6 +510,7 @@ export default function Checkout() {
                         Save
                       </button>
                       <button
+                        type="button"
                         onClick={() => setShowNewAddress(false)}
                         className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition-colors"
                       >
@@ -589,18 +535,10 @@ export default function Checkout() {
                   <p className="text-sm text-muted-foreground">No shipping methods available.</p>
                 ) : (
                   <div className="space-y-3">
-
-
-
-
-
-
-
-
-
                     {shippingMethods.map((method) => (
                       <button
                         key={method.id}
+                        type="button"
                         onClick={() => setSelectedShippingId(method.id)}
                         className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-center justify-between ${selectedShippingId === method.id
                           ? "border-primary bg-primary/5"
@@ -631,25 +569,6 @@ export default function Checkout() {
                         </div>
                       </button>
                     ))}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
                   </div>
                 )}
               </div>
@@ -667,6 +586,7 @@ export default function Checkout() {
               </div>
 
               <button
+                type="button"
                 onClick={() => setStep(1)}
                 disabled={!canProceedFromStep(0)}
                 className="w-full bg-primary text-primary-foreground font-bold py-3.5 rounded-xl hover:bg-primary/90 transition-all text-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
@@ -687,6 +607,7 @@ export default function Checkout() {
                 <div className="space-y-3">
                   {/* COD */}
                   <button
+                    type="button"
                     onClick={() => setPaymentMethod("cod")}
                     className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-center justify-between ${paymentMethod === "cod" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
                       }`}
@@ -705,6 +626,7 @@ export default function Checkout() {
 
                   {/* Card */}
                   <button
+                    type="button"
                     onClick={() => setPaymentMethod("card")}
                     className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-center justify-between ${paymentMethod === "card" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
                       }`}
@@ -812,7 +734,7 @@ export default function Checkout() {
                         <p className="text-xs text-emerald-600">Applied — saving ${discount.toFixed(2)}</p>
                       </div>
                     </div>
-                    <button onClick={handleRemoveCoupon} className="text-muted-foreground hover:text-red-500 transition-colors">
+                    <button type="button" onClick={handleRemoveCoupon} className="text-muted-foreground hover:text-red-500 transition-colors">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -827,6 +749,7 @@ export default function Checkout() {
                       className="flex-1 px-3 py-2.5 bg-muted rounded-xl text-sm font-mono uppercase border border-transparent focus:outline-none focus:ring-2 focus:ring-primary/40"
                     />
                     <button
+                      type="button"
                       onClick={handleApplyCoupon}
                       disabled={couponLoading || !couponInput.trim()}
                       className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
@@ -841,12 +764,14 @@ export default function Checkout() {
 
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={() => setStep(0)}
                   className="px-6 py-3 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-muted transition-colors"
                 >
                   ← Back
                 </button>
                 <button
+                  type="button"
                   onClick={() => setStep(2)}
                   disabled={!canProceedFromStep(1)}
                   className="flex-1 bg-primary text-primary-foreground font-bold py-3 rounded-xl hover:bg-primary/90 transition-all text-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
@@ -867,6 +792,7 @@ export default function Checkout() {
                     <Package className="w-4 h-4 text-primary" /> Order Items ({resolvedItems.length})
                   </h2>
                 </div>
+
                 <div className="divide-y divide-border">
                   {resolvedItems.map((item) => (
                     <div key={`${item.productId}__${item.variantId}`} className="flex items-center gap-4 p-4">
@@ -884,6 +810,30 @@ export default function Checkout() {
                       </div>
                       <p className="font-bold text-foreground text-sm shrink-0">
                         ${(item.price * item.quantity).toFixed(2)}
+                      </p>
+                    </div>
+                  ))}
+                  {resolvedGiftBoxItems.map((box) => (
+                    <div key={box.itemId} className="flex items-center gap-4 p-4">
+                      <div className="w-14 h-14 rounded-xl bg-muted border border-border overflow-hidden shrink-0">
+                        {box.image ? (
+                          <img src={box.image} alt={box.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-muted" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded-full">
+                            Gift Box
+                          </span>
+                          <p className="text-sm font-bold text-foreground truncate">{box.name}</p>
+                        </div>
+                        {box.contentsLabel && <p className="text-xs text-muted-foreground truncate">{box.contentsLabel}</p>}
+                        <p className="text-xs text-muted-foreground">Qty: {box.quantity}</p>
+                      </div>
+                      <p className="font-bold text-foreground text-sm shrink-0">
+                        ${(box.price * box.quantity).toFixed(2)}
                       </p>
                     </div>
                   ))}
@@ -929,12 +879,14 @@ export default function Checkout() {
 
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={() => setStep(1)}
                   className="px-6 py-3 rounded-xl border border-border text-sm font-semibold text-foreground hover:bg-muted transition-colors"
                 >
                   ← Back
                 </button>
                 <button
+                  type="button"
                   onClick={handlePlaceOrder}
                   disabled={placing}
                   className="flex-1 bg-primary text-primary-foreground font-bold py-3.5 rounded-xl hover:bg-primary/90 transition-all text-sm disabled:opacity-60 flex items-center justify-center gap-2"
@@ -955,7 +907,6 @@ export default function Checkout() {
           <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
             <h2 className="font-black text-foreground mb-4">Order Summary</h2>
 
-            {/* Mini item list */}
             <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
               {resolvedItems.map((item) => (
                 <div key={`${item.productId}__${item.variantId}`} className="flex items-center gap-2">
@@ -967,6 +918,19 @@ export default function Checkout() {
                   </p>
                   <p className="text-xs font-bold text-foreground shrink-0">
                     ${(item.price * item.quantity).toFixed(2)}
+                  </p>
+                </div>
+              ))}
+              {resolvedGiftBoxItems.map((box) => (
+                <div key={box.itemId} className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-muted overflow-hidden shrink-0">
+                    {box.image && <img src={box.image} alt="" className="w-full h-full object-cover" />}
+                  </div>
+                  <p className="flex-1 text-xs text-muted-foreground truncate">
+                    {box.name} ×{box.quantity}
+                  </p>
+                  <p className="text-xs font-bold text-foreground shrink-0">
+                    ${(box.price * box.quantity).toFixed(2)}
                   </p>
                 </div>
               ))}

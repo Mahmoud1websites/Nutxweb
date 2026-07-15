@@ -2,17 +2,10 @@ import { Filter, LayoutGrid, List, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import ProductCard from "../components/ProductCard";
+import { useLanguage } from "../i18n/LanguageContext";
 
 // Replace with your real API Base URL
 const API_BASE_URL = "http://localhost:5000/api";
-
-const SORT_OPTIONS = [
-  { value: "featured", label: "Featured" },
-  { value: "price_asc", label: "Price: Low to High" },
-  { value: "price_desc", label: "Price: High to Low" },
-  { value: "rating", label: "Top Rated" },
-  { value: "newest", label: "Newest" },
-];
 
 interface Category {
   id: string;
@@ -23,11 +16,20 @@ interface Category {
 }
 
 export default function Products() {
+  const { t } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const [liveProducts, setLiveProducts] = useState<any[]>([]);
   const [liveCategories, setLiveCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>("");
+
+  const SORT_OPTIONS = [
+    { value: "featured", label: t("prod_featured") },
+    { value: "price_asc", label: t("prod_price_asc") },
+    { value: "price_desc", label: t("prod_price_desc") },
+    { value: "rating", label: t("prod_top_rated") },
+    { value: "newest", label: t("prod_newest") },
+  ];
 
   // Client-side specific filter states
   const [priceMax, setPriceMax] = useState(3000);
@@ -39,10 +41,9 @@ export default function Products() {
   // Unified state parameters
   const categoryParam = searchParams.get("category") ?? "";
   const sortParam = searchParams.get("sort") ?? "newest";
-  const searchQuery = searchParams.get("search") ?? ""; // 👈 FIX: Changed from "q" to "search"
+  const searchQuery = searchParams.get("search") ?? "";
   const badgeParam = searchParams.get("badge") ?? "";
 
-  // 1. Fetch categories on mount
   useEffect(() => {
     async function fetchCategories() {
       try {
@@ -58,7 +59,6 @@ export default function Products() {
     fetchCategories();
   }, []);
 
-  // 2. Fetch products whenever server-driven parameters change
   useEffect(() => {
     async function fetchProducts() {
       setLoading(true);
@@ -68,8 +68,8 @@ export default function Products() {
         if (categoryParam) urlParams.set("category", categoryParam);
         if (searchQuery) urlParams.set("search", searchQuery);
         if (sortParam) urlParams.set("sort", sortParam);
-        
-        urlParams.set("limit", "100"); 
+
+        urlParams.set("limit", "100");
 
         const res = await fetch(`${API_BASE_URL}/products?${urlParams.toString()}`);
         const data = await res.json();
@@ -80,7 +80,7 @@ export default function Products() {
           setErrorMsg(data.error || "Failed to parse database records.");
         }
       } catch (err: any) {
-        setErrorMsg("Network error connecting to backend API.");
+        setErrorMsg(t("prod_network_error"));
       } finally {
         setLoading(false);
       }
@@ -89,7 +89,6 @@ export default function Products() {
     fetchProducts();
   }, [categoryParam, searchQuery, sortParam]);
 
-  // Handle setting category slug inside route params
   function setCategory(slug: string) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -107,7 +106,6 @@ export default function Products() {
     });
   }
 
-  // 3. Client secondary pruning (price limits, minimum ratings, stock)
   const filtered = useMemo(() => {
     let result = [...liveProducts];
 
@@ -138,10 +136,10 @@ export default function Products() {
       filters.push({
         key: "search",
         label: `"${searchQuery}"`,
-        clear: () => setSearchParams((p) => { 
-          const n = new URLSearchParams(p); 
-          n.delete("search"); // 👈 FIX: Match key
-          return n; 
+        clear: () => setSearchParams((p) => {
+          const n = new URLSearchParams(p);
+          n.delete("search");
+          return n;
         })
       });
     }
@@ -152,13 +150,13 @@ export default function Products() {
     <div className="flex flex-col gap-6">
       {/* Categories */}
       <div>
-        <h3 className="font-semibold text-foreground text-sm mb-3">Category</h3>
+        <h3 className="font-semibold text-foreground text-sm mb-3">{t("prod_category")}</h3>
         <div className="flex flex-col gap-1">
           <button
             onClick={() => setCategory("")}
             className={`text-left px-3 py-1.5 rounded-lg text-sm transition-colors ${!categoryParam ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
           >
-            All Products
+            {t("prod_all_products")}
           </button>
           {liveCategories.map((cat) => (
             <button
@@ -175,7 +173,7 @@ export default function Products() {
       {/* Price range */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-foreground text-sm">Max Price</h3>
+          <h3 className="font-semibold text-foreground text-sm">{t("prod_max_price")}</h3>
           <span className="text-sm font-semibold text-primary">${priceMax.toLocaleString()}</span>
         </div>
         <input
@@ -195,7 +193,7 @@ export default function Products() {
 
       {/* Rating */}
       <div>
-        <h3 className="font-semibold text-foreground text-sm mb-3">Min Rating</h3>
+        <h3 className="font-semibold text-foreground text-sm mb-3">{t("prod_min_rating")}</h3>
         <div className="flex flex-col gap-1">
           {[0, 4, 4.5, 4.8].map((r) => (
             <button
@@ -204,11 +202,11 @@ export default function Products() {
               className={`text-left px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 transition-colors ${minRating === r ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
             >
               {r === 0 ? (
-                "Any rating"
+                t("prod_any_rating")
               ) : (
                 <>
                   <span className="text-primary">{"★".repeat(Math.floor(r))}</span>
-                  {r}+ stars
+                  {r}+ {t("prod_stars_up")}
                 </>
               )}
             </button>
@@ -225,7 +223,7 @@ export default function Products() {
           >
             <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${inStockOnly ? "translate-x-5" : "translate-x-0.5"}`} />
           </div>
-          <span className="text-sm font-medium text-foreground">In stock only</span>
+          <span className="text-sm font-medium text-foreground">{t("prod_in_stock_only")}</span>
         </label>
       </div>
     </div>
@@ -239,13 +237,13 @@ export default function Products() {
           {categoryParam ? (
             liveCategories.find(c => c.slug === categoryParam)?.name || categoryParam
           ) : searchQuery ? (
-            `Search: "${searchQuery}"`
+            `${t("prod_search_results")} "${searchQuery}"`
           ) : (
-            "All Products"
+            t("prod_all_products")
           )}
         </h1>
         <p className="text-muted-foreground mt-1">
-          {loading ? "Loading items..." : `${filtered.length} products found`}
+          {loading ? t("prod_loading_items") : `${filtered.length} ${t("prod_products_found")}`}
         </p>
       </div>
 
@@ -281,7 +279,7 @@ export default function Products() {
               className="lg:hidden flex items-center gap-2 px-3 py-2 bg-muted rounded-lg text-sm font-medium hover:bg-muted/70 transition-colors"
             >
               <SlidersHorizontal className="w-4 h-4" />
-              Filters
+              {t("prod_filters")}
             </button>
 
             <div className="flex-1" />
@@ -321,18 +319,18 @@ export default function Products() {
 
           {loading ? (
             <div className="flex items-center justify-center py-24 text-muted-foreground animate-pulse text-sm font-medium">
-              Updating product gallery from server...
+              {t("prod_updating_gallery")}
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
               <div className="text-5xl">🔍</div>
-              <h3 className="text-xl font-bold text-foreground">No products found</h3>
-              <p className="text-muted-foreground">Try adjusting your filters or search query.</p>
+              <h3 className="text-xl font-bold text-foreground">{t("prod_no_products_found")}</h3>
+              <p className="text-muted-foreground">{t("prod_adjust_filters")}</p>
               <button
                 onClick={() => { setSearchParams({}); setPriceMax(3000); setMinRating(0); setInStockOnly(false); }}
                 className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
               >
-                Clear all filters
+                {t("prod_clear_filters")}
               </button>
             </div>
           ) : viewMode === "grid" ? (
@@ -348,14 +346,14 @@ export default function Products() {
                   <img src={p.image || p.images?.[0]} alt={p.name} className="w-28 h-28 object-cover rounded-lg bg-muted shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-primary uppercase tracking-wider">
-                      {typeof p.category === 'object' ? p.category?.name : (p.category || 'General')}
+                      {typeof p.category === 'object' ? p.category?.name : (p.category || t("prod_general"))}
                     </p>
                     <h3 className="font-bold text-foreground mt-0.5 truncate">{p.name}</h3>
                     <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{p.description}</p>
                     <div className="flex items-center gap-4 mt-3">
                       <span className="font-bold text-foreground text-lg">${(p.price ?? 0).toFixed(2)}</span>
                       {p.compareAtPrice > 0 && <span className="text-sm text-muted-foreground line-through">${p.compareAtPrice.toFixed(2)}</span>}
-                      <span className="text-sm text-muted-foreground">★ {p.avgRating || p.rating || 0} ({ (p.reviewCount || 0).toLocaleString()})</span>
+                      <span className="text-sm text-muted-foreground">★ {p.avgRating || p.rating || 0} ({(p.reviewCount || 0).toLocaleString()})</span>
                     </div>
                   </div>
                 </div>
@@ -371,7 +369,7 @@ export default function Products() {
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
           <div className="absolute right-0 top-0 h-full w-80 bg-background shadow-2xl p-6 overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="font-bold text-foreground flex items-center gap-2"><Filter className="w-4 h-4" /> Filters</h2>
+              <h2 className="font-bold text-foreground flex items-center gap-2"><Filter className="w-4 h-4" /> {t("prod_filters")}</h2>
               <button onClick={() => setSidebarOpen(false)} className="p-2 hover:bg-muted rounded-lg transition-colors">
                 <X className="w-4 h-4" />
               </button>
@@ -381,7 +379,7 @@ export default function Products() {
               onClick={() => setSidebarOpen(false)}
               className="w-full mt-6 bg-primary text-primary-foreground py-3 rounded-xl font-semibold hover:bg-primary/90 transition-colors"
             >
-              Apply Filters ({filtered.length} results)
+              {t("prod_apply_filters")} ({filtered.length} {t("prod_results")})
             </button>
           </div>
         </div>

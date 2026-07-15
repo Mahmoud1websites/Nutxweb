@@ -2,9 +2,11 @@ import { Heart, ShoppingCart, Trash2 } from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { useStore } from "../store";
+import { useLanguage } from "../i18n/LanguageContext";
 
 export default function Wishlist() {
   const { state, dispatch, products } = useStore();
+  const { t } = useLanguage();
 
   // ✅ resolve from the live store products, not a local data file
   const wishlistProducts = (products || []).filter((p: any) =>
@@ -14,35 +16,35 @@ export default function Wishlist() {
   function handleMoveToCart(productId: string, variantId?: string) {
     dispatch({ type: "ADD_TO_CART", productId, variantId });
     dispatch({ type: "TOGGLE_WISHLIST", productId });
-    toast.success("Moved to cart");
+    toast.success(t("wishlist_moved_to_cart"));
   }
 
   function handleRemove(productId: string) {
     dispatch({ type: "TOGGLE_WISHLIST", productId });
-    toast.success("Removed from wishlist");
+    toast.success(t("wishlist_removed"));
   }
 
   if (wishlistProducts.length === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-black text-foreground">Wishlist</h1>
+          <h1 className="text-3xl font-black text-foreground">{t("wishlist_title")}</h1>
         </div>
         <div className="flex flex-col items-center justify-center py-24 gap-6 text-center">
           <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center">
             <Heart className="w-12 h-12 text-muted-foreground" />
           </div>
           <div>
-            <h2 className="text-2xl font-black text-foreground">Your wishlist is empty</h2>
+            <h2 className="text-2xl font-black text-foreground">{t("wishlist_empty_title")}</h2>
             <p className="text-muted-foreground mt-1">
-              Save items you love to come back to them later.
+              {t("wishlist_empty_sub")}
             </p>
           </div>
           <Link
             to="/products"
             className="flex items-center gap-2 bg-primary text-primary-foreground font-semibold px-6 py-3 rounded-xl hover:bg-primary/90 transition-colors"
           >
-            Discover Products
+            {t("wishlist_discover")}
           </Link>
         </div>
       </div>
@@ -53,7 +55,7 @@ export default function Wishlist() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-black text-foreground">
-          Wishlist
+          {t("wishlist_title")}
           <span className="ml-3 text-muted-foreground font-normal text-xl">
             ({wishlistProducts.length})
           </span>
@@ -72,7 +74,6 @@ export default function Wishlist() {
               )
             : 0;
 
-          // ✅ use slug for navigation
           const productHref = `/products/${product.slug}`;
 
           return (
@@ -80,23 +81,20 @@ export default function Wishlist() {
               key={product.id}
               className="group relative flex flex-col bg-card border border-border rounded-xl overflow-hidden hover:border-primary/40 transition-all duration-300"
             >
-              {/* Discount badge */}
               {hasDiscount && (
                 <span className="absolute top-3 left-3 z-10 text-xs font-semibold px-2 py-0.5 rounded-full bg-primary text-primary-foreground">
                   -{discount}%
                 </span>
               )}
 
-              {/* Remove button */}
               <button
                 onClick={() => handleRemove(product.id)}
                 className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-background/80 backdrop-blur-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                aria-label="Remove from wishlist"
+                aria-label={t("wishlist_remove_aria")}
               >
                 <Trash2 className="w-4 h-4" />
               </button>
 
-              {/* Image */}
               <Link to={productHref} className="aspect-square overflow-hidden bg-muted block">
                 <img
                   src={product.image?.url || "https://placehold.co/400x400?text=No+Image"}
@@ -105,7 +103,6 @@ export default function Wishlist() {
                 />
               </Link>
 
-              {/* Info */}
               <div className="flex flex-col gap-2 p-4">
                 <p className="text-xs font-semibold text-primary uppercase tracking-wider">
                   {product.category?.name || product.brand || ""}
@@ -130,7 +127,7 @@ export default function Wishlist() {
                   className="mt-1 flex items-center justify-center gap-1.5 bg-primary text-primary-foreground text-xs font-semibold py-2 rounded-lg hover:bg-primary/90 transition-colors"
                 >
                   <ShoppingCart className="w-3.5 h-3.5" />
-                  Add to Cart
+                  {t("wishlist_add_to_cart")}
                 </button>
               </div>
             </div>
@@ -145,12 +142,12 @@ export default function Wishlist() {
               dispatch({ type: "ADD_TO_CART", productId: p.id, variantId: p.defaultVariantId });
               dispatch({ type: "TOGGLE_WISHLIST", productId: p.id });
             });
-            toast.success("All items moved to cart");
+            toast.success(t("wishlist_all_moved"));
           }}
           className="flex items-center gap-2 bg-foreground text-background font-bold px-6 py-3 rounded-xl hover:bg-foreground/90 transition-colors"
         >
           <ShoppingCart className="w-4 h-4" />
-          Add All to Cart
+          {t("wishlist_add_all")}
         </button>
       </div>
     </div>

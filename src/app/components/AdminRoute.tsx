@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { Navigate, Outlet } from "react-router";
+import { Navigate, Outlet, useLocation } from "react-router";
 import { supabase } from "../config/supabaseClient";
 import { toast } from "sonner";
 
 export default function AdminRoute() {
-  const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const location = useLocation();
+  const [status, setStatus] = useState<"checking" | "no-session" | "not-admin" | "ok">("checking");
 
   useEffect(() => {
     let mounted = true;
@@ -14,7 +14,7 @@ export default function AdminRoute() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
-          if (mounted) { setIsAdmin(false); setLoading(false); }
+          if (mounted) setStatus("no-session");
           return;
         }
 
@@ -27,12 +27,10 @@ export default function AdminRoute() {
         if (!mounted) return;
 
         const admin = !error && !!data?.is_admin;
-        setIsAdmin(admin);
-        setLoading(false);
-
         if (!admin) toast.error("You don't have access to the admin panel.");
+        setStatus(admin ? "ok" : "not-admin");
       } catch {
-        if (mounted) { setIsAdmin(false); setLoading(false); }
+        if (mounted) setStatus("no-session");
       }
     }
 
@@ -50,7 +48,7 @@ export default function AdminRoute() {
     };
   }, []);
 
-  if (loading) {
+  if (status === "checking") {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontSize: 13, color: "var(--color-text-secondary)" }}>
         Checking access…
@@ -58,5 +56,15 @@ export default function AdminRoute() {
     );
   }
 
-  return isAdmin ? <Outlet /> : <Navigate to="/" replace />;
+  // No session at all → send to the sign-in form, remembering where they were headed.
+  if (status === "no-session") {
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  }
+
+  // Logged in, but not an admin account → don't loop back to /login, just bounce home.
+  if (status === "not-admin") {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
 }

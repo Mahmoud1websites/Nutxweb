@@ -8,14 +8,14 @@
   --card-foreground: #000000;
   --popover: #ffffff;
   --popover-foreground: #000000;
-  --primary: #6F4E37;
+  --primary: #4A5D23;
   --primary-foreground: #ffffff;
   --secondary: #f1f3f8;
   --secondary-foreground: #000000;
   --muted: #e9ecf2;
   --muted-foreground: #64748b;
-  --accent: #fff7ed;
-  --accent-foreground: #6F4E37;
+  --accent: #f2f6ea;
+  --accent-foreground: #4A5D23;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: rgba(0, 0, 0, 0.08);
@@ -24,21 +24,21 @@
   --switch-background: #cbd5e1;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #6F4E37;
-  --chart-1: #6F4E37;
-  --chart-2: #6F4E37;
+  --ring: #4A5D23;
+  --chart-1: #4A5D23;
+  --chart-2: #4A5D23;
   --chart-3: #10b981;
   --chart-4: #8b5cf6;
   --chart-5: #ef4444;
   --radius: 0.5rem;
   --sidebar: #f1f3f8;
   --sidebar-foreground: #000000;
-  --sidebar-primary: #6F4E37;
+  --sidebar-primary: #4A5D23;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #e9ecf2;
   --sidebar-accent-foreground: #000000;
   --sidebar-border: rgba(0, 0, 0, 0.08);
-  --sidebar-ring: #6F4E37;
+  --sidebar-ring: #4A5D23;
 }
 
 .dark {
@@ -48,14 +48,14 @@
   --card-foreground: #e8e8f5;
   --popover: #000000;
   --popover-foreground: #e8e8f5;
-  --primary: #6F4E37;
+  --primary: #6B8E4E;
   --primary-foreground: #ffffff;
   --secondary: #000000;
   --secondary-foreground: #a8a8c8;
   --muted: #000000;
   --muted-foreground: #7070a0;
-  --accent: #2d1a0a;
-  --accent-foreground: #6F4E37;
+  --accent: #1c2a13;
+  --accent-foreground: #6B8E4E;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
   --border: rgba(255, 255, 255, 0.07);
@@ -64,20 +64,20 @@
   --switch-background: #3a3a5c;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #6F4E37;
-  --chart-1: #6F4E37;
-  --chart-2: #6F4E37;
+  --ring: #6B8E4E;
+  --chart-1: #6B8E4E;
+  --chart-2: #6B8E4E;
   --chart-3: #34d399;
   --chart-4: #a78bfa;
   --chart-5: #f87171;
   --sidebar: #16213e;
   --sidebar-foreground: #e8e8f5;
-  --sidebar-primary: #6F4E37;
+  --sidebar-primary: #6B8E4E;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #1e1e38;
   --sidebar-accent-foreground: #e8e8f5;
   --sidebar-border: rgba(255, 255, 255, 0.07);
-  --sidebar-ring: #6F4E37;
+  --sidebar-ring: #6B8E4E;
 }
 
 @theme inline {
@@ -131,11 +131,6 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 
-  /**
-  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
-  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
-  */
-
   html {
     font-size: var(--font-size);
   }
@@ -183,8 +178,6 @@
   }
 }
 
-
-
 .admin-panel {
   --color-background-primary: var(--card);
   --color-background-secondary: var(--secondary);
@@ -210,7 +203,3 @@
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Consolas, monospace;
 }
-
-
-
-

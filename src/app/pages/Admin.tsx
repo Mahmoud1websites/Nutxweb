@@ -25,12 +25,13 @@ async function apiFetch(path: string, opts: RequestInit = {}) {
 }
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
-
-type View = "dashboard" | "products" | "categories" | "orders" | "inventory" | "coupons" | "shipping" | "customers" | "reviews" | "brands";
-
+type View = "dashboard" | "products" | "categories" | "orders" | "inventory" | "coupons" | "shipping" | "customers" | "reviews" | "brands" | "giftboxes";
 interface Category { id: string; name: string; slug: string; parent_id: string | null; image_url: string | null; }
-interface Product { id: string; name: string; slug: string; brand: string; is_active: boolean; categories?: { id: string; name: string }; product_variants?: Variant[]; }
-interface Variant { id: string; sku: string; price: string; compare_at_price: string; color: string; size: string; inventory?: { id: string; quantity: number; low_stock_threshold: number }[]; }
+interface Product { id: string; name: string; slug: string; brand: string; is_active: boolean; sold_by_weight?: boolean; categories?: { id: string; name: string }; product_variants?: Variant[]; }
+interface Variant { id: string; sku: string; price: string; compare_at_price: string; color: string; size: string; weight_grams?: number | null; inventory?: { id: string; quantity: number; low_stock_threshold: number }[]; }
+
+
+
 interface Order { id: string; status: string; total_amount: string; created_at: string; profiles?: { full_name: string }; payments?: { method: string; status: string }[]; }
 interface InvItem { id: string; quantity: number; low_stock_threshold: number; product_variants?: { id: string; sku: string; color: string; size: string; products?: { name: string } }; }
 interface Coupon { id: string; code: string; description: string; discount_type: "percentage" | "fixed"; discount_value: number; minimum_order_amount: number | null; usage_limit: number | null; used_count: number; expiry_date: string | null; is_active: boolean; }
@@ -42,6 +43,15 @@ interface Brand {
   image_url: string | null;
   description: string | null;
   is_featured: boolean;
+}
+interface GiftBox {
+  id: string; name: string; slug: string; description: string | null; image_url: string | null;
+  base_price: number; capacity: number | null; is_customizable: boolean; is_active: boolean;
+}
+interface GiftBoxProductLink {
+  id: string; default_quantity: number; sort_order: number; product_id: string; variant_id: string;
+  products?: { id: string; name: string };
+  product_variants?: { id: string; sku: string; price: string; size?: string; color?: string; weight_grams?: number | null };
 }
 /* ─── Design tokens ──────────────────────────────────────────────────────── */
 
@@ -265,6 +275,270 @@ function BrandModal({ brand, onClose, onSaved }: { brand: Brand | null; onClose:
     </Modal>
   );
 }
+/* ══════════════════════════════════════════════════════════════════════════ */
+/*  GIFT BOXES                                                                 */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+function GiftBoxesPanel() {
+  const [boxes, setBoxes] = useState<GiftBox[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState<GiftBox | "new" | null>(null);
+  const [confirm, setConfirm] = useState<GiftBox | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { const d = await apiFetch("/admin/gift-boxes"); setBoxes(d.giftBoxes || []); }
+    catch (e: any) { toast.error(e.message); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function doDelete(b: GiftBox) {
+    try { await apiFetch(`/admin/gift-boxes/${b.id}`, { method: "DELETE" }); toast.success("Gift box deleted"); load(); }
+    catch (e: any) { toast.error(e.message); }
+    finally { setConfirm(null); }
+  }
+
+  return (
+    <div>
+      <PageHeader title="Gift Boxes" subtitle={`${boxes.length} box${boxes.length !== 1 ? "es" : ""}`}>
+        <Btn variant="primary" onClick={() => setModal("new")}><i className="ti ti-plus" aria-hidden /> Add gift box</Btn>
+      </PageHeader>
+      <Card noPad>
+        {loading ? <Spinner /> : boxes.length === 0 ? <Empty>No gift boxes yet.</Empty> : (
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr><Th>Image</Th><Th>Name</Th><Th>Price</Th><Th>Type</Th><Th>Status</Th><Th w="80px" /></tr></thead>
+            <tbody>
+              {boxes.map(b => (
+                <tr key={b.id} className="adm-tr">
+                  <Td>
+                    {b.image_url
+                      ? <img src={b.image_url} alt={b.name} style={{ width: 44, height: 44, objectFit: "cover", borderRadius: T.radius, border: `0.5px solid ${T.border}` }} />
+                      : <div style={{ width: 44, height: 44, borderRadius: T.radius, background: T.bg2, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <i className="ti ti-gift" style={{ color: T.hint, fontSize: 16 }} aria-hidden />
+                      </div>}
+                  </Td>
+                  <Td bold>{b.name}</Td>
+                  <Td>${Number(b.base_price).toFixed(2)}</Td>
+                  <Td><Badge label={b.is_customizable ? "Build your own" : "Pre-made"} variant={b.is_customizable ? "blue" : "gray"} /></Td>
+                  <Td><Badge label={b.is_active ? "Active" : "Inactive"} variant={b.is_active ? "green" : "gray"} /></Td>
+                  <Td>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <IconBtn icon="ti-edit" onClick={() => setModal(b)} label="Edit gift box" />
+                      <IconBtn icon="ti-trash" onClick={() => setConfirm(b)} label="Delete gift box" danger />
+                    </div>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+
+      {modal !== null && (
+        <GiftBoxModal
+          box={modal === "new" ? null : modal}
+          onClose={() => setModal(null)}
+          onSaved={() => { setModal(null); load(); toast.success(modal === "new" ? "Gift box created" : "Gift box updated"); }}
+        />
+      )}
+      {confirm && (
+        <Confirm msg={`Delete "${confirm.name}"? This cannot be undone.`} onConfirm={() => doDelete(confirm)} onCancel={() => setConfirm(null)} />
+      )}
+    </div>
+  );
+}
+
+function GiftBoxModal({ box, onClose, onSaved }: { box: GiftBox | null; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState({
+    name: box?.name || "",
+    slug: box?.slug || "",
+    description: box?.description || "",
+    image_url: box?.image_url || "",
+    base_price: box?.base_price != null ? String(box.base_price) : "",
+    capacity: box?.capacity != null ? String(box.capacity) : "",
+    is_customizable: box ? box.is_customizable : true,
+    is_active: box ? box.is_active : true,
+  });
+  const [saving, setSaving] = useState(false);
+  const slugTouched = useRef(false);
+
+  function setF(k: string, v: any) { setForm(f => ({ ...f, [k]: v })); }
+  function autoSlug(name: string) { return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+
+  async function save() {
+    if (!form.name.trim() || !form.slug.trim() || !form.base_price) { toast.error("Name, slug, and price are required"); return; }
+    setSaving(true);
+    const body = {
+      ...form,
+      base_price: parseFloat(form.base_price) || 0,
+      capacity: form.capacity ? parseInt(form.capacity) : null,
+    };
+    try {
+      if (box) await apiFetch(`/admin/gift-boxes/${box.id}`, { method: "PATCH", body: JSON.stringify(body) });
+      else await apiFetch("/admin/gift-boxes", { method: "POST", body: JSON.stringify(body) });
+      onSaved();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <Modal
+      title={box ? `Edit — ${box.name}` : "New gift box"}
+      onClose={onClose}
+      width={600}
+      footer={<><Btn onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save} disabled={saving}>{saving ? "Saving…" : box ? "Save changes" : "Create gift box"}</Btn></>}
+    >
+      <FRow>
+        <FG label="Box name" half>
+          <input style={inputStyle} value={form.name} onChange={e => {
+            setF("name", e.target.value);
+            if (!slugTouched.current) setF("slug", autoSlug(e.target.value));
+          }} placeholder="Deluxe Nut Collection" />
+        </FG>
+        <FG label="Slug" half>
+          <input style={inputStyle} value={form.slug} onChange={e => { slugTouched.current = true; setF("slug", e.target.value); }} />
+        </FG>
+      </FRow>
+      <FG label="Description">
+        <textarea style={{ ...inputStyle, minHeight: 64, resize: "vertical" }} value={form.description} onChange={e => setF("description", e.target.value)} />
+      </FG>
+      <FG label="Image URL">
+        <input style={inputStyle} value={form.image_url} onChange={e => setF("image_url", e.target.value)} placeholder="https://…" />
+      </FG>
+      <FRow>
+        <FG label="Price ($)" half>
+          <input style={inputStyle} type="number" step="0.01" value={form.base_price} onChange={e => setF("base_price", e.target.value)} />
+        </FG>
+        <FG label="Capacity (optional label, e.g. items)" half>
+          <input style={inputStyle} type="number" value={form.capacity} onChange={e => setF("capacity", e.target.value)} placeholder="Optional" />
+        </FG>
+      </FRow>
+      <FRow>
+        <FG label="Box type" half>
+          <select style={inputStyle} value={form.is_customizable ? "1" : "0"} onChange={e => setF("is_customizable", e.target.value === "1")}>
+            <option value="1">Build your own — customer picks contents</option>
+            <option value="0">Pre-made — fixed contents, add as-is</option>
+          </select>
+        </FG>
+        <FG label="Status" half>
+          <select style={inputStyle} value={form.is_active ? "1" : "0"} onChange={e => setF("is_active", e.target.value === "1")}>
+            <option value="1">Active</option>
+            <option value="0">Inactive</option>
+          </select>
+        </FG>
+      </FRow>
+
+      {box && <GiftBoxProductsSection boxId={box.id} />}
+      {!box && (
+        <div style={{ fontSize: 12, color: T.muted, marginTop: 8 }}>
+          Save the box first, then reopen it to add eligible products.
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function GiftBoxProductsSection({ boxId }: { boxId: string }) {
+  const [links, setLinks] = useState<GiftBoxProductLink[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selProductId, setSelProductId] = useState("");
+  const [selVariantId, setSelVariantId] = useState("");
+  const [defaultQty, setDefaultQty] = useState("1");
+  const [adding, setAdding] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [linksD, productsD] = await Promise.all([
+        apiFetch(`/admin/gift-boxes/${boxId}/products`),
+        apiFetch("/admin/products?limit=200"),
+      ]);
+      setLinks(linksD.products || []);
+      setAllProducts(productsD.products || []);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setLoading(false); }
+  }, [boxId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const selectedProduct = allProducts.find(p => p.id === selProductId);
+
+  async function addLink() {
+    if (!selProductId || !selVariantId) { toast.error("Choose a product and variant"); return; }
+    setAdding(true);
+    try {
+      await apiFetch(`/admin/gift-boxes/${boxId}/products`, {
+        method: "POST",
+        body: JSON.stringify({ product_id: selProductId, variant_id: selVariantId, default_quantity: parseInt(defaultQty) || 0 }),
+      });
+      setSelProductId(""); setSelVariantId(""); setDefaultQty("1");
+      load();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setAdding(false); }
+  }
+
+  async function updateQty(link: GiftBoxProductLink, qty: number) {
+    try { await apiFetch(`/admin/gift-boxes/${boxId}/products/${link.id}`, { method: "PATCH", body: JSON.stringify({ default_quantity: qty, sort_order: link.sort_order }) }); load(); }
+    catch (e: any) { toast.error(e.message); }
+  }
+
+  async function removeLink(link: GiftBoxProductLink) {
+    try { await apiFetch(`/admin/gift-boxes/${boxId}/products/${link.id}`, { method: "DELETE" }); load(); }
+    catch (e: any) { toast.error(e.message); }
+  }
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ fontSize: 11, fontWeight: 500, color: T.muted, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 8 }}>
+        Eligible products
+      </div>
+
+      {loading ? <Spinner /> : links.length === 0 ? <Empty>No products added yet.</Empty> : (
+        links.map(l => (
+          <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: `0.5px solid ${T.border}`, borderRadius: T.radius, padding: "8px 12px", marginBottom: 6 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500 }}>{l.products?.name || "—"}</div>
+              <div style={{ fontSize: 11, color: T.muted }}>
+                {l.product_variants?.sku} · ${parseFloat(l.product_variants?.price || "0").toFixed(2)}
+                {l.product_variants?.weight_grams ? ` · ${l.product_variants.weight_grams}g` : ""}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 11, color: T.muted }}>Default qty</span>
+              <input
+                type="number"
+                style={{ ...inputStyle, width: 56, padding: "4px 6px" }}
+                value={l.default_quantity}
+                onChange={e => updateQty(l, parseInt(e.target.value) || 0)}
+              />
+              <IconBtn icon="ti-trash" onClick={() => removeLink(l)} label="Remove" danger />
+            </div>
+          </div>
+        ))
+      )}
+
+      <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+        <select style={{ ...inputStyle, flex: "1 1 160px" }} value={selProductId} onChange={e => { setSelProductId(e.target.value); setSelVariantId(""); }}>
+          <option value="">— select product —</option>
+          {allProducts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <select style={{ ...inputStyle, flex: "1 1 140px" }} value={selVariantId} onChange={e => setSelVariantId(e.target.value)} disabled={!selectedProduct}>
+          <option value="">— select variant —</option>
+          {selectedProduct?.product_variants?.map((v: any) => (
+            <option key={v.id} value={v.id}>{v.sku} — ${parseFloat(v.price).toFixed(2)}</option>
+          ))}
+        </select>
+        <input type="number" style={{ ...inputStyle, width: 80 }} value={defaultQty} onChange={e => setDefaultQty(e.target.value)} placeholder="Qty" />
+        <Btn size="sm" onClick={addLink} disabled={adding || !selProductId || !selVariantId}>
+          <i className="ti ti-plus" aria-hidden /> {adding ? "Adding…" : "Add"}
+        </Btn>
+      </div>
+    </div>
+  );
+}
 function Spinner() {
   return (
     <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
@@ -357,9 +631,6 @@ function Modal({ title, onClose, children, footer, width = 520 }: {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-
-  // ADD THIS LINE:
-  console.log("Modal rendering, portal target:", document.body);
 
   return createPortal(
     <div
@@ -459,7 +730,9 @@ export default function Admin() {
     { key: "coupons", label: "Coupons", icon: "ti-tag" },
     { key: "customers", label: "Customers", icon: "ti-users" },
     { key: "brands", label: "Brands", icon: "ti-award" },
+    { key: "giftboxes", label: "Gift Boxes", icon: "ti-gift" },
     { key: "reviews", label: "Reviews", icon: "ti-star" },
+
   ];
 
   return (
@@ -516,6 +789,8 @@ export default function Admin() {
           {view === "customers" && <CustomersPanel />}
           {view === "reviews" && <ReviewsPanel />}
           {view === "brands" && <BrandsPanel />}
+          {view === "giftboxes" && <GiftBoxesPanel />}
+
         </main>
       </div>
     </>
@@ -678,60 +953,6 @@ function ProductsPanel() {
   );
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 function ProductImagesSection({ productId }: { productId: string }) {
   const [images, setImages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -800,24 +1021,9 @@ function ProductImagesSection({ productId }: { productId: string }) {
   );
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 function VariantsSection({ productId }: { productId: string }) {
   const [variants, setVariants] = useState<Variant[]>([]);
+  const [soldByWeight, setSoldByWeight] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Variant | "new" | null>(null);
   const [confirm, setConfirm] = useState<Variant | null>(null);
@@ -827,6 +1033,7 @@ function VariantsSection({ productId }: { productId: string }) {
     try {
       const d = await apiFetch(`/admin/products/${productId}`);
       setVariants(d.product?.product_variants || []);
+      setSoldByWeight(!!d.product?.sold_by_weight);
     } catch (e: any) { toast.error(e.message); }
     finally { setLoading(false); }
   }, [productId]);
@@ -857,7 +1064,7 @@ function VariantsSection({ productId }: { productId: string }) {
                 {v.sku}{[v.color, v.size].filter(Boolean).length ? ` — ${[v.color, v.size].filter(Boolean).join(" / ")}` : ""}
               </div>
               <div style={{ fontSize: 11, color: T.muted }}>
-                ${parseFloat(v.price).toFixed(2)} · stock {v.inventory?.[0]?.quantity ?? 0}
+                ${parseFloat(v.price).toFixed(2)}{v.weight_grams ? ` · ${v.weight_grams}g` : ""} · stock {v.inventory?.[0]?.quantity ?? 0}
               </div>
             </div>
             <div style={{ display: "flex", gap: 4 }}>
@@ -872,6 +1079,7 @@ function VariantsSection({ productId }: { productId: string }) {
         <VariantModal
           productId={productId}
           variant={editing === "new" ? null : editing}
+          soldByWeight={soldByWeight}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -891,19 +1099,34 @@ function VariantsSection({ productId }: { productId: string }) {
   );
 }
 
-function VariantModal({ productId, variant, onClose, onSaved }: { productId: string; variant: Variant | null; onClose: () => void; onSaved: () => void }) {
+/**
+ * Single-variant editor. When `soldByWeight` is true, shows a small
+ * "$/kg" helper that auto-fills Price from Weight × rate — still fully
+ * editable afterward. This is what stops admins from hand-typing the
+ * same flat price into every weight tier.
+ */
+function VariantModal({ productId, variant, soldByWeight, onClose, onSaved }: { productId: string; variant: Variant | null; soldByWeight?: boolean; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({
     sku: variant?.sku || "",
     price: variant?.price ? String(variant.price) : "",
     compare_at_price: variant?.compare_at_price ? String(variant.compare_at_price) : "",
     color: variant?.color || "",
     size: variant?.size || "",
+    weight_grams: variant?.weight_grams != null ? String(variant.weight_grams) : "",
     stock: String(variant?.inventory?.[0]?.quantity ?? 10),
     low_stock_threshold: String(variant?.inventory?.[0]?.low_stock_threshold ?? 5),
   });
+  const [pricePerKg, setPricePerKg] = useState("");
   const [saving, setSaving] = useState(false);
 
   function setF(k: string, v: string) { setForm(f => ({ ...f, [k]: v })); }
+
+  function applyRate(rate: string, weightStr = form.weight_grams) {
+    const w = parseFloat(weightStr);
+    const r = parseFloat(rate);
+    if (!w || !r) return;
+    setF("price", ((r * w) / 1000).toFixed(2));
+  }
 
   async function save() {
     if (!form.sku.trim() || !form.price) { toast.error("SKU and price are required"); return; }
@@ -914,6 +1137,7 @@ function VariantModal({ productId, variant, onClose, onSaved }: { productId: str
       compare_at_price: form.compare_at_price ? parseFloat(form.compare_at_price) : null,
       color: form.color || null,
       size: form.size || null,
+      weight_grams: form.weight_grams ? parseInt(form.weight_grams) : null,
       stock: parseInt(form.stock) || 0,
       low_stock_threshold: parseInt(form.low_stock_threshold) || 5,
     };
@@ -934,51 +1158,84 @@ function VariantModal({ productId, variant, onClose, onSaved }: { productId: str
     >
       <FRow>
         <FG label="SKU" half><input style={inputStyle} value={form.sku} onChange={e => setF("sku", e.target.value)} placeholder="SKU-001" /></FG>
+        <FG label="Weight (grams)" half>
+          <input
+            style={inputStyle}
+            type="number"
+            value={form.weight_grams}
+            onChange={e => {
+              setF("weight_grams", e.target.value);
+              if (pricePerKg) applyRate(pricePerKg, e.target.value);
+            }}
+            placeholder="e.g. 500"
+            disabled={!soldByWeight}
+          />
+        </FG>
+      </FRow>
+
+      {soldByWeight && (
+        <FG label="Quick calc from $/kg (optional)">
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              style={inputStyle}
+              type="number"
+              step="0.01"
+              value={pricePerKg}
+              onChange={e => { setPricePerKg(e.target.value); applyRate(e.target.value); }}
+              placeholder="e.g. 110 for $110/kg"
+            />
+            <Btn size="sm" onClick={() => applyRate(pricePerKg)} disabled={!pricePerKg || !form.weight_grams}>Apply</Btn>
+          </div>
+          <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
+            Fills Price below using rate × weight above. Price stays editable after.
+          </div>
+        </FG>
+      )}
+
+      <FRow>
         <FG label="Price ($)" half><input style={inputStyle} type="number" step="0.01" value={form.price} onChange={e => setF("price", e.target.value)} /></FG>
+        <FG label="Compare price ($)" half><input style={inputStyle} type="number" step="0.01" value={form.compare_at_price} onChange={e => setF("compare_at_price", e.target.value)} /></FG>
       </FRow>
       <FRow>
-        <FG label="Compare price ($)" half><input style={inputStyle} type="number" step="0.01" value={form.compare_at_price} onChange={e => setF("compare_at_price", e.target.value)} /></FG>
         <FG label="Stock qty" half><input style={inputStyle} type="number" value={form.stock} onChange={e => setF("stock", e.target.value)} /></FG>
+        <FG label="Low stock threshold" half><input style={inputStyle} type="number" value={form.low_stock_threshold} onChange={e => setF("low_stock_threshold", e.target.value)} /></FG>
       </FRow>
       <FRow>
         <FG label="Color" half><input style={inputStyle} value={form.color} onChange={e => setF("color", e.target.value)} placeholder="Black" /></FG>
         <FG label="Size" half><input style={inputStyle} value={form.size} onChange={e => setF("size", e.target.value)} placeholder="—" /></FG>
       </FRow>
-      <FG label="Low stock threshold">
-        <input style={inputStyle} type="number" value={form.low_stock_threshold} onChange={e => setF("low_stock_threshold", e.target.value)} />
-      </FG>
     </Modal>
   );
 }
 
-
-
-
-
-
-
-
-
-
+/**
+ * New-product form. When "Sold by weight" is Yes, shows a "Price per kg"
+ * shortcut above the variant list — entering it (or editing any variant's
+ * weight) fills price = rate × weight for every row, still editable per row.
+ */
 function ProductModal({ product, onClose, onSaved }: { product: Product | null; onClose: () => void; onSaved: () => void }) {
   const [cats, setCats] = useState<Category[]>([]);
   const [saving, setSaving] = useState(false);
   const [variants, setVariants] = useState<any[]>(
     product?.product_variants?.length
       ? product.product_variants.map(v => ({ ...v, stock: v.inventory?.[0]?.quantity ?? 0 }))
-      : [{ sku: "", price: "", compare_at_price: "", color: "", size: "", stock: 10 }]
+      : [{ sku: "", price: "", compare_at_price: "", color: "", size: "", weight_grams: "", stock: 10 }]
   );
   const [form, setForm] = useState({
     name: product?.name || "",
+    name_ar: (product as any)?.name_ar || "",
     slug: product?.slug || "",
     brand: product?.brand || "",
     description: (product as any)?.description || "",
+    description_ar: (product as any)?.description_ar || "",
     category_id: product?.categories?.id || "",
     image_url: "",
     is_active: product ? product.is_active : true,
-    is_featured: (product as any)?.is_featured ?? false,       // ← add
-    is_best_seller: (product as any)?.is_best_seller ?? false, // ← add
+    is_featured: (product as any)?.is_featured ?? false,
+    is_best_seller: (product as any)?.is_best_seller ?? false,
+    sold_by_weight: (product as any)?.sold_by_weight ?? false,
   });
+  const [pricePerKg, setPricePerKg] = useState("");
   const slugTouched = useRef(false);
 
   useEffect(() => {
@@ -994,7 +1251,17 @@ function ProductModal({ product, onClose, onSaved }: { product: Product | null; 
     setVariants(vs => vs.map((x, idx) => idx === i ? { ...x, [k]: v } : x));
   }
 
-async function save() {
+  function applyPricePerKgToAll(rate: string) {
+    const r = parseFloat(rate);
+    if (!r) return;
+    setVariants(vs => vs.map(v => {
+      const w = parseFloat(v.weight_grams);
+      if (!w) return v;
+      return { ...v, price: ((r * w) / 1000).toFixed(2) };
+    }));
+  }
+
+  async function save() {
     if (!form.name.trim() || !form.slug.trim()) { toast.error("Name and slug are required"); return; }
 
     const invalidVariant = variants.find(v => !v.sku?.trim() || !v.price);
@@ -1003,8 +1270,6 @@ async function save() {
       return;
     }
 
-
-    
     setSaving(true);
     const body = {
       ...form,
@@ -1015,6 +1280,7 @@ async function save() {
         stock: parseInt(v.stock) || 0,
         color: v.color || null,
         size: v.size || null,
+        weight_grams: v.weight_grams ? parseInt(v.weight_grams) : null,
       })),
       images: form.image_url
         ? [{ url: form.image_url, alt_text: form.name, is_primary: true, sort_order: 0 }]
@@ -1043,22 +1309,19 @@ async function save() {
       }
     >
       <FRow>
-        <FG label="Product name" half>
+        <FG label="Product name (English)" half>
           <input style={inputStyle} value={form.name} onChange={e => {
             setField("name", e.target.value);
             if (!slugTouched.current) setField("slug", autoSlug(e.target.value));
           }} />
         </FG>
-        <FG label="Brand" half>
-          <input style={inputStyle} value={form.brand} onChange={e => setField("brand", e.target.value)} />
+        <FG label="Product name (Arabic)" half>
+          <input style={{ ...inputStyle, direction: "rtl", textAlign: "right" }} value={form.name_ar} onChange={e => setField("name_ar", e.target.value)} placeholder="اسم المنتج بالعربي" />
         </FG>
       </FRow>
       <FRow>
-        <FG label="Slug" half>
-          <input style={inputStyle} value={form.slug} onChange={e => {
-            slugTouched.current = true;
-            setField("slug", e.target.value);
-          }} />
+        <FG label="Brand" half>
+          <input style={inputStyle} value={form.brand} onChange={e => setField("brand", e.target.value)} />
         </FG>
         <FG label="Category" half>
           <select style={inputStyle} value={form.category_id} onChange={e => setField("category_id", e.target.value)}>
@@ -1067,8 +1330,17 @@ async function save() {
           </select>
         </FG>
       </FRow>
-      <FG label="Description">
+      <FG label="Slug">
+        <input style={inputStyle} value={form.slug} onChange={e => {
+          slugTouched.current = true;
+          setField("slug", e.target.value);
+        }} />
+      </FG>
+      <FG label="Description (English)">
         <textarea style={{ ...inputStyle, minHeight: 72, resize: "vertical" }} value={form.description} onChange={e => setField("description", e.target.value)} />
+      </FG>
+      <FG label="Description (Arabic)">
+        <textarea style={{ ...inputStyle, minHeight: 72, resize: "vertical", direction: "rtl", textAlign: "right" }} value={form.description_ar} onChange={e => setField("description_ar", e.target.value)} placeholder="وصف المنتج بالعربي" />
       </FG>
       <FG label="Image URL">
         <input style={inputStyle} value={form.image_url} onChange={e => setField("image_url", e.target.value)} placeholder="https://…" />
@@ -1079,10 +1351,6 @@ async function save() {
           <option value="0">Inactive</option>
         </select>
       </FG>
-
-
-
-
       <FG label="Featured on home page">
         <select style={inputStyle} value={form.is_featured ? "1" : "0"} onChange={e => setField("is_featured", e.target.value === "1")}>
           <option value="0">No</option>
@@ -1096,34 +1364,33 @@ async function save() {
         </select>
       </FG>
 
+      <FG label="Sold by weight">
+        <select style={inputStyle} value={form.sold_by_weight ? "1" : "0"} onChange={e => setField("sold_by_weight", e.target.value === "1")}>
+          <option value="0">No — sold as fixed units</option>
+          <option value="1">Yes — customer picks a weight (e.g. 250g / 500g / 1kg)</option>
+        </select>
+      </FG>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+      {form.sold_by_weight && !product && (
+        <FG label="Price per kg ($) — optional shortcut">
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              style={inputStyle}
+              type="number"
+              step="0.01"
+              value={pricePerKg}
+              onChange={e => { setPricePerKg(e.target.value); applyPricePerKgToAll(e.target.value); }}
+              placeholder="e.g. 110 for $110/kg"
+            />
+            <Btn size="sm" onClick={() => applyPricePerKgToAll(pricePerKg)} disabled={!pricePerKg}>
+              Apply to all variants
+            </Btn>
+          </div>
+          <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
+            Set each variant's weight below, then apply — this fills price = rate × weight. Still editable per-variant after.
+          </div>
+        </FG>
+      )}
 
       {product && <ProductImagesSection productId={product.id} />}
 
@@ -1149,9 +1416,27 @@ async function save() {
                 <FG label="Color" half><input style={inputStyle} value={v.color || ""} onChange={e => updateVariant(i, "color", e.target.value)} placeholder="Black" /></FG>
                 <FG label="Size" half><input style={inputStyle} value={v.size || ""} onChange={e => updateVariant(i, "size", e.target.value)} placeholder="—" /></FG>
               </FRow>
+              {form.sold_by_weight && (
+                <FG label="Weight (grams)">
+                  <input
+                    style={inputStyle}
+                    type="number"
+                    value={v.weight_grams || ""}
+                    onChange={e => {
+                      updateVariant(i, "weight_grams", e.target.value);
+                      if (pricePerKg) {
+                        const w = parseFloat(e.target.value);
+                        const r = parseFloat(pricePerKg);
+                        if (w && r) updateVariant(i, "price", ((r * w) / 1000).toFixed(2));
+                      }
+                    }}
+                    placeholder="e.g. 500"
+                  />
+                </FG>
+              )}
             </div>
           ))}
-          <Btn size="sm" onClick={() => setVariants(vs => [...vs, { sku: "", price: "", compare_at_price: "", color: "", size: "", stock: 10 }])}>
+          <Btn size="sm" onClick={() => setVariants(vs => [...vs, { sku: "", price: "", compare_at_price: "", color: "", size: "", weight_grams: "", stock: 10 }])}>
             <i className="ti ti-plus" aria-hidden /> Add variant
           </Btn>
         </>
@@ -1159,36 +1444,6 @@ async function save() {
     </Modal>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 /*  CATEGORIES                                                                 */
@@ -1654,35 +1909,6 @@ function CouponsPanel() {
   );
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* ══════════════════════════════════════════════════════════════════════════ */
 /*  SHIPPING METHODS                                                          */
 /* ══════════════════════════════════════════════════════════════════════════ */
@@ -1815,50 +2041,6 @@ function ShippingMethodModal({ method, onClose, onSaved }: { method: ShippingMet
   );
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 function CouponModal({ coupon, onClose, onSaved }: { coupon: Coupon | null; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({
     code: coupon?.code || "",
@@ -1942,23 +2124,11 @@ function CouponModal({ coupon, onClose, onSaved }: { coupon: Coupon | null; onCl
 /*  CUSTOMERS                                                                  */
 /* ══════════════════════════════════════════════════════════════════════════ */
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 function CustomersPanel() {
-
-
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [detail, setDetail] = useState<any | null>(null);
   const [confirmAdmin, setConfirmAdmin] = useState<Customer | null>(null);
 
   async function toggleAdmin(c: Customer) {
@@ -1970,16 +2140,6 @@ function CustomersPanel() {
     } catch (e: any) { toast.error(e.message); }
     finally { setConfirmAdmin(null); }
   }
-
-
-
-
-
-
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [detail, setDetail] = useState<any | null>(null);
 
   useEffect(() => {
     apiFetch("/admin/customers")

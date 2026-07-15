@@ -9,48 +9,50 @@ import {
   Star,
   Truck,
   Wrench,
+  Leaf,
   Zap,
 } from "lucide-react";
 import { Link } from "react-router";
 import { useMemo, useEffect, useState } from "react";
 import ProductCard from "../components/ProductCard";
 import { useStore } from "../store";
+import { useLanguage } from "../i18n/LanguageContext";
 
-const image = new URL("../../assets/image.png", import.meta.url).href;
-const images = new URL("../../assets/whychoose.png", import.meta.url).href;
+const image = new URL("../../assets/back2.jpg.png", import.meta.url).href;
+const images = new URL("../../assets/whychoose2.png", import.meta.url).href;
 
 const brands = [
-  "Kenwood", "Pioneer", "JBL", "Thule", "Hella",
-  "Bosch", "Bilstein", "K&N", "Michelin", "Varta",
-  "Blaupunkt", "Alpine", "Meguiar's", "3M", "Osram",
-];
-
-const trustItems = [
-  { icon: Package, label: "Genuine Parts Only", sub: "100% authentic products" },
-  { icon: Truck, label: "Fast Local Delivery", sub: "Nationwide across Lebanon" },
-  { icon: Wrench, label: "Fitment Guarantee", sub: "Right part for your vehicle" },
-  { icon: Shield, label: "2-Year Warranty", sub: "On all electronic items" },
-  { icon: Star, label: "5-Star Rated Service", sub: "Trusted by 8,900+ customers" },
-  { icon: Award, label: "Authorized Dealer", sub: "50+ premium brands" },
-];
-
-const whyUs = [
-  { icon: Award, title: "Premium Quality Nuts", body: "Carefully sourced from trusted farms for superior taste and freshness." },
-  { icon: Settings2, title: "Freshly Roasted Daily", body: "Small-batch roasting ensures maximum flavor and crunch." },
-  { icon: Zap, title: "Gourmet Chocolate Selection", body: "Premium chocolates crafted to perfectly complement our roasted nuts." },
-];
-
-const checklist = [
-  "10,000+ Happy Customers",
-  "50+ Premium Products",
-  "100% Freshly Roasted",
-  "24/7 Customer Support",
-  "5★ Customer Satisfaction",
-  "Fast Nationwide Delivery",
+  "Lindt", "Ferrero", "Godiva", "Nutella", "Blue Diamond",
+  "Planters", "Lindor", "Toblerone", "Kinder", "Ritter Sport",
+  "Cadbury", "Milka", "Wonderful Pistachios", "Hershey's", "Anna's",
 ];
 
 export default function Home() {
+  const { t } = useLanguage();
 
+  const trustItems = [
+    { icon: Package, label: t("trust_freshly_packed_label"), sub: t("trust_freshly_packed_sub") },
+    { icon: Truck, label: t("trust_fast_delivery_label"), sub: t("trust_fast_delivery_sub") },
+    { icon: Leaf, label: t("trust_premium_quality_label"), sub: t("trust_premium_quality_sub") },
+    { icon: Shield, label: t("trust_guarantee_label"), sub: t("trust_guarantee_sub") },
+    { icon: Star, label: t("trust_rated_label"), sub: t("trust_rated_sub") },
+    { icon: Award, label: t("trust_award_label"), sub: t("trust_award_sub") },
+  ];
+
+  const whyUs = [
+    { icon: Award, title: t("why_quality_title"), body: t("why_quality_body") },
+    { icon: Settings2, title: t("why_roasted_title"), body: t("why_roasted_body") },
+    { icon: Zap, title: t("why_chocolate_title"), body: t("why_chocolate_body") },
+  ];
+
+  const checklist = [
+    t("checklist_happy_customers"),
+    t("checklist_products"),
+    t("checklist_freshly_roasted"),
+    t("checklist_support"),
+    t("checklist_satisfaction"),
+    t("checklist_delivery"),
+  ];
 
   // Also fetch directly from API to get is_featured / is_best_seller flags
   // (store context may not include those fields depending on implementation)
@@ -69,7 +71,6 @@ export default function Home() {
 
   // Prefer API products (have is_featured/is_best_seller), fall back to store
   const liveProducts = apiProducts;
-
 
   const featuredProducts = useMemo(() => {
     const featured = liveProducts.filter((p: any) => p.is_featured);
@@ -119,19 +120,19 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <div className="h-px w-10 bg-primary" />
               <span className="text-primary text-xs font-bold uppercase tracking-[0.2em]">
-                Lebanon's Premier Nut Roastery
+                {t("hero_kicker")}
               </span>
             </div>
 
             <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black text-foreground leading-none tracking-tight">
-              ELEVATE
+              {t("hero_title_line1")}
               <br />
-              <span className="text-primary">YOUR SNACKING</span>
+              <span className="text-primary">{t("hero_title_line2")}</span>
               <br />
             </h1>
 
             <p className="text-base sm:text-lg text-muted-foreground max-w-lg leading-relaxed">
-              From freshly roasted almonds and mixed nuts to artisan nut butters and gifting tins — NUTX  carries premium roasted nuts for every taste and occasion.
+              {t("hero_description")}
             </p>
 
             <div className="flex flex-wrap gap-3 pt-1">
@@ -139,14 +140,14 @@ export default function Home() {
                 to="/products"
                 className="inline-flex items-center gap-2 bg-primary text-primary-foreground font-bold px-7 py-3.5 rounded-xl hover:bg-primary/90 transition-all hover:gap-3 text-sm"
               >
-                Shop All Products
+                {t("hero_cta_shop_all")}
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
-                to="/products?category=Audio+%26+Electronics"
+               to="/products?category=Nuts+%26+Mixes"
                 className="inline-flex items-center gap-2 bg-transparent text-foreground font-semibold px-7 py-3.5 rounded-xl border border-border hover:bg-muted transition-colors text-sm"
               >
-                Nuts & Mixes
+                {t("hero_cta_nuts_mixes")}
               </Link>
             </div>
 
@@ -178,15 +179,15 @@ export default function Home() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <div className="h-px w-6 bg-primary" />
-              <p className="text-primary text-xs font-bold uppercase tracking-[0.2em]">Browse</p>
+              <p className="text-primary text-xs font-bold uppercase tracking-[0.2em]">{t("section_browse_kicker")}</p>
             </div>
-            <h2 className="text-3xl font-black text-foreground">Shop by Category</h2>
+            <h2 className="text-3xl font-black text-foreground">{t("section_shop_by_category")}</h2>
           </div>
           <Link
             to="/products"
             className="hidden sm:flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-primary transition-colors"
           >
-            All products <ArrowRight className="w-4 h-4" />
+            {t("section_all_products")} <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
 
@@ -218,15 +219,15 @@ export default function Home() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <div className="h-px w-6 bg-primary" />
-                <p className="text-primary text-xs font-bold uppercase tracking-[0.2em]">Handpicked</p>
+                <p className="text-primary text-xs font-bold uppercase tracking-[0.2em]">{t("section_handpicked_kicker")}</p>
               </div>
-              <h2 className="text-3xl font-black text-foreground">Featured Products</h2>
+              <h2 className="text-3xl font-black text-foreground">{t("section_featured_products")}</h2>
             </div>
             <Link
               to="/products"
               className="hidden sm:flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-primary transition-colors"
             >
-              View all <ArrowRight className="w-4 h-4" />
+              {t("section_view_all")} <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -236,31 +237,6 @@ export default function Home() {
           </div>
         </section>
       )}
-
-      {/* ── BRANDS WE CARRY ─────────────────────────────────────────────── */}
-      <section className="border-y border-border bg-muted/20 py-10 overflow-hidden">
-        <p className="text-center text-[11px] font-bold uppercase tracking-[0.25em] text-muted-foreground mb-7">
-          Authorized Dealer — Trusted Brands
-        </p>
-        <div className="overflow-hidden mb-5">
-          <div className="flex w-max animate-marquee">
-            {[...brands, ...brands].map((brand, i) => (
-              <span key={i} className="mx-10 text-xl font-black text-muted-foreground/30 hover:text-primary transition-colors duration-200 cursor-default tracking-widest uppercase whitespace-nowrap">
-                {brand}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="overflow-hidden">
-          <div className="flex w-max" style={{ animation: "marquee 36s linear infinite reverse" }}>
-            {[...brands, ...brands].reverse().map((brand, i) => (
-              <span key={i} className="mx-10 text-xl font-black text-muted-foreground/20 hover:text-primary transition-colors duration-200 cursor-default tracking-widest uppercase whitespace-nowrap">
-                {brand}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* ── PROMO BANNER ─────────────────────────────────────────────────── */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 py-20">
@@ -273,20 +249,20 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-primary-foreground/60" />
                 <p className="text-primary-foreground/60 text-xs font-semibold uppercase tracking-wider">
-                  Limited-time offer
+                  {t("promo_limited_offer")}
                 </p>
               </div>
               <h3 className="text-3xl md:text-4xl font-black text-primary-foreground leading-tight">
-                New customer?
+                {t("promo_new_customer")}
                 <br />
-                Get 20% off your first order.
+                {t("promo_get_20_off")}
               </h3>
               <p className="text-primary-foreground/75 text-sm">
-                Use code{" "}
+                {t("promo_use_code")}{" "}
                 <strong className="bg-white/20 px-2 py-0.5 rounded font-mono text-white">
-                  Garagehub20
+                  NUTX20
                 </strong>{" "}
-                at checkout. Valid on all products.
+                {t("promo_at_checkout")}
               </p>
             </div>
             <div className="flex flex-col items-center gap-3 shrink-0">
@@ -294,30 +270,30 @@ export default function Home() {
                 to="/products"
                 className="bg-white text-primary font-bold px-10 py-3.5 rounded-xl hover:bg-white/90 transition-colors text-sm whitespace-nowrap"
               >
-                Shop Now & Save
+                {t("promo_shop_now")}
               </Link>
-              <p className="text-primary-foreground/50 text-xs">No minimum order required</p>
+              <p className="text-primary-foreground/50 text-xs">{t("promo_no_minimum")}</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── WHY Garage Hub ─────────────────────────────────────────────── */}
+      {/* ── WHY NUTX ─────────────────────────────────────────────── */}
       <section className="border-t border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-20">
           <div className="mb-14">
             <div className="flex items-center gap-3 mb-2">
               <div className="h-px w-6 bg-primary" />
-              <p className="text-primary text-xs font-bold uppercase tracking-[0.2em]">Our Promise</p>
+              <p className="text-primary text-xs font-bold uppercase tracking-[0.2em]">{t("why_kicker")}</p>
             </div>
-            <h2 className="text-3xl font-black text-foreground">Why choose Garage Hub?</h2>
+            <h2 className="text-3xl font-black text-foreground">{t("why_title")}</h2>
           </div>
 
           <div className="grid lg:grid-cols-2 gap-12 items-start">
             <div className="relative rounded-3xl overflow-hidden aspect-[4/5] lg:aspect-auto lg:h-full min-h-[420px]">
               <img
               src={images}
-                alt="Garage Hub store — premium car accessories"
+                alt="NUTX store — premium nuts and chocolate"
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
@@ -339,7 +315,7 @@ export default function Home() {
 
               <div className="border-t border-border pt-6">
                 <p className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground mb-4">
-                  Everything you can count on
+                  {t("why_everything_count_on")}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {checklist.map((point) => (
@@ -362,15 +338,15 @@ export default function Home() {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <div className="h-px w-6 bg-primary" />
-                <p className="text-primary text-xs font-bold uppercase tracking-[0.2em]">Top Rated</p>
+                <p className="text-primary text-xs font-bold uppercase tracking-[0.2em]">{t("section_top_rated_kicker")}</p>
               </div>
-              <h2 className="text-3xl font-black text-foreground">Best Sellers</h2>
+              <h2 className="text-3xl font-black text-foreground">{t("section_best_sellers")}</h2>
             </div>
             <Link
               to="/products?sort=popular"
               className="hidden sm:flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-primary transition-colors"
             >
-              View all <ArrowRight className="w-4 h-4" />
+              {t("section_view_all")} <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

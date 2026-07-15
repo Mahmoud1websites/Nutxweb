@@ -2,6 +2,8 @@ import { createBrowserRouter } from "react-router";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
+import GiftBoxes from "./pages/GiftBoxes";
+import GiftBoxDetail from "./pages/GiftBoxDetail";
 
 import Home from "./pages/Home";
 import Products from "./pages/Products";
@@ -32,8 +34,10 @@ export const router = createBrowserRouter([
       { path: "products/:slug", Component: ProductDetail },
       { path: "brands", Component: Brands },
       { path: "deals", Component: Deals },
-      { path: "cart", Component: Cart },
+     { path: "cart", Component: Cart },
       { path: "wishlist", Component: Wishlist },
+      { path: "gift-boxes", Component: GiftBoxes },
+      { path: "gift-boxes/:slug", Component: GiftBoxDetail },
       { path: "login", Component: SignIn },
       { path: "signup", Component: SignUp },
       { path: "forgot-password", Component: ForgotPassword },

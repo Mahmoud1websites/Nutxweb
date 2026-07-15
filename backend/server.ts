@@ -101,13 +101,20 @@ const { data, error } = await supabaseAdmin
   .eq('is_active', true); // This will now return the 3 rows you just inserted
 
 /* ─── PRODUCTS ───────────────────────────────────────────────────────────── */
-
 /**
  * GET /api/products
  * Public. Returns active products with their primary image, cheapest variant price,
  * average rating, and category name.
  * Supports: ?category=slug, ?brand=, ?search=, ?sort=, ?page=, ?limit=
  */
+
+
+
+
+
+
+
+
 app.get("/api/products", async (req: Request, res: Response) => {
   try {
     const { category, brand, search, sort = "newest", page = "1", limit = "12" } = req.query;
@@ -117,12 +124,14 @@ app.get("/api/products", async (req: Request, res: Response) => {
       .from("products")
       .select(
         `
-        id, name, slug, description, brand, is_active,
-        is_featured, is_best_seller,        
-        categories (id, name, slug),
+        id, name, name_ar, slug, description, description_ar, brand, is_active,
+        is_featured, is_best_seller, sold_by_weight,
+        categories (id, name, name_ar, slug),
         product_images (url, alt_text, is_primary),
-        product_variants (id, price, compare_at_price, color, size,
-          inventory (quantity)
+        product_variants (
+          id, sku, size, color, price, compare_at_price,
+          weight_grams,
+          inventory (id, quantity, low_stock_threshold)
         ),
         reviews (rating)
         `,
@@ -141,14 +150,10 @@ app.get("/api/products", async (req: Request, res: Response) => {
       if (cat) query = query.eq("category_id", cat.id);
     }
 
-    // Sorting is done post-fetch since price lives in variants
     const { data, error, count } = await query.range(offset, offset + parseInt(limit as string) - 1);
     if (error) throw error;
 
-    // Shape each product for the frontend
     const products = (data || []).map(shapeProduct);
-
-    // Apply sort on shaped data
     sortProducts(products, sort as string);
 
     res.json({ success: true, products, total: count, page: parseInt(page as string), limit: parseInt(limit as string) });
@@ -157,23 +162,52 @@ app.get("/api/products", async (req: Request, res: Response) => {
   }
 });
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /**
  * GET /api/products/:slug
  * Public. Full product detail including all variants, images, reviews, inventory.
  */
 app.get("/api/products/:slug", async (req: Request, res: Response) => {
-  console.log("👉 Fetching slug:", req.params.slug);
   try {
     const { data, error } = await supabaseAdmin
       .from("products")
       .select(
         `
-        id, name, slug, description, brand, is_active, category_id,
-        is_featured, is_best_seller,         
-        categories (id, name, slug),
+        id, name, name_ar, slug, description, description_ar, brand, is_active, category_id,
+        is_featured, is_best_seller, sold_by_weight,
+        categories (id, name, name_ar, slug),
         product_images (id, url, alt_text, is_primary, sort_order),
         product_variants (
           id, sku, size, color, price, compare_at_price,
+          weight_grams,
           inventory (quantity, low_stock_threshold)
         ),
         reviews (
@@ -187,9 +221,6 @@ app.get("/api/products/:slug", async (req: Request, res: Response) => {
       .eq("is_active", true)
       .single();
 
-    console.log("📦 Data:", JSON.stringify(data));
-    console.log("❌ Error:", JSON.stringify(error));
-
     if (error || !data) return res.status(404).json({ success: false, error: "Product not found." });
 
     res.json({ success: true, product: data });
@@ -197,7 +228,6 @@ app.get("/api/products/:slug", async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
 /* ─── CATEGORIES ─────────────────────────────────────────────────────────── */
 
 /**
@@ -300,13 +330,11 @@ app.post("/api/admin/brands/upload-image", requireAuth, requireAdmin, async (req
 });
 
 
-
-
 app.get("/api/categories", async (_req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
       .from("categories")
-      .select("id, name, slug, image_url, parent_id")
+      .select("id, name, name_ar, slug, image_url, parent_id")
       .order("name");
 
     if (error) throw error;
@@ -315,7 +343,6 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
 
 
 // Add these to server.ts BEFORE app.listen()
@@ -411,7 +438,33 @@ app.get("/api/cart", async (req: AuthedRequest, res: Response) => {
       ? await cartQuery.eq("user_id", userId).single()
       : await cartQuery.eq("session_id", sessionId).single();
 
-    if (!cartResult.data) return res.json({ success: true, items: [] });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    if (!cartResult.data) return res.json({ success: true, items: [], giftBoxItems: [] });
 
     const { data: items, error } = await supabaseAdmin
       .from("cart_items")
@@ -420,14 +473,43 @@ app.get("/api/cart", async (req: AuthedRequest, res: Response) => {
         id, quantity,
         product_variants (
           id, sku, price, compare_at_price, size, color,
-          products (id, name, slug, product_images (url, alt_text, is_primary))
+          products (id, name, slug, sold_by_weight, product_images (url, alt_text, is_primary))
         )
         `
       )
       .eq("cart_id", cartResult.data.id);
 
     if (error) throw error;
-    res.json({ success: true, cartId: cartResult.data.id, items });
+
+    const { data: giftBoxItems, error: gbError } = await supabaseAdmin
+      .from("cart_gift_box_items")
+      .select(
+        `
+        id, quantity,
+        gift_boxes ( id, name, slug, base_price, image_url ),
+        cart_gift_box_item_contents (
+          id, quantity,
+          product_variants ( id, sku, size, color, products(id, name) )
+        )
+        `
+      )
+      .eq("cart_id", cartResult.data.id);
+
+    if (gbError) throw gbError;
+
+    res.json({ success: true, cartId: cartResult.data.id, items, giftBoxItems: giftBoxItems || [] });
+
+
+
+
+
+
+
+
+
+
+
+
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -436,6 +518,12 @@ app.get("/api/cart", async (req: AuthedRequest, res: Response) => {
 /**
  * POST /api/cart/items
  * Adds an item. Creates cart row if it doesn't exist yet.
+ *
+ * `quantity` means different things depending on the product:
+ *  - unit-sold products  -> number of units
+ *  - weight-sold products -> number of GRAMS (variant.price is $/gram for these)
+ * The frontend is responsible for sending the right number; this route just
+ * checks it against inventory.quantity, which uses the same unit.
  */
 app.post("/api/cart/items", async (req: AuthedRequest, res: Response) => {
   try {
@@ -622,6 +710,17 @@ app.post("/api/cart/merge", requireAuth, async (req: AuthedRequest, res: Respons
  * Auth required. Validates a coupon code against the coupons table.
  * Returns discount details for the frontend to apply.
  */
+
+
+
+
+
+
+
+
+
+
+
 app.post("/api/coupons/validate", requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
     const { code, orderSubtotal } = req.body;
@@ -666,6 +765,19 @@ app.post("/api/coupons/validate", requireAuth, async (req: AuthedRequest, res: R
       return res.status(400).json({ success: false, error: "You have already used this coupon." });
     }
 
+    // ← HERE — first-order-only check (with cancelled/refunded excluded)
+    if (coupon.first_order_only) {
+      const { count: pastOrderCount } = await supabaseAdmin
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", req.userId)
+        .not("status", "in", "(cancelled,refunded)");
+
+      if ((pastOrderCount ?? 0) > 0) {
+        return res.status(400).json({ success: false, error: "This coupon is only valid on your first order." });
+      }
+    }
+
     // Calculate discount
     let discountAmount = 0;
     if (coupon.discount_type === "percentage") {
@@ -690,6 +802,34 @@ app.post("/api/coupons/validate", requireAuth, async (req: AuthedRequest, res: R
   }
 });
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* ─── CHECKOUT ───────────────────────────────────────────────────────────── */
 
 /**
@@ -713,6 +853,16 @@ app.post("/api/checkout/place-order", requireAuth, async (req: AuthedRequest, re
       return res.status(400).json({ success: false, error: "Shipping address and method are required." });
     }
 
+
+
+
+
+
+
+
+
+
+
     // Fetch cart items
     const { data: cartItems, error: cartErr } = await supabaseAdmin
       .from("cart_items")
@@ -729,7 +879,38 @@ app.post("/api/checkout/place-order", requireAuth, async (req: AuthedRequest, re
       .eq("cart_id", cartId);
 
     if (cartErr) throw cartErr;
-    if (!cartItems?.length) return res.status(400).json({ success: false, error: "Cart is empty." });
+
+    // Fetch gift box items
+    const { data: giftBoxCartItems, error: gbCartErr } = await supabaseAdmin
+      .from("cart_gift_box_items")
+      .select(
+        `
+        id, quantity,
+        gift_boxes ( id, name, base_price ),
+        cart_gift_box_item_contents (
+          id, quantity, variant_id,
+          product_variants ( id, sku, price, products(name), inventory(id, quantity) )
+        )
+        `
+      )
+      .eq("cart_id", cartId);
+
+    if (gbCartErr) throw gbCartErr;
+
+    if (!cartItems?.length && !giftBoxCartItems?.length) {
+      return res.status(400).json({ success: false, error: "Cart is empty." });
+    }
+
+
+
+
+
+
+
+
+
+
+
 
     // Validate stock and build line items
     let subtotal = 0;
@@ -738,7 +919,7 @@ app.post("/api/checkout/place-order", requireAuth, async (req: AuthedRequest, re
 
     for (const item of cartItems) {
       const variant = item.product_variants as any;
-      const inv = variant.inventory?.[0];
+      const inv = Array.isArray(variant.inventory) ? variant.inventory[0] : variant.inventory;
 
       if (!inv || inv.quantity < item.quantity) {
         return res.status(400).json({
@@ -762,6 +943,52 @@ app.post("/api/checkout/place-order", requireAuth, async (req: AuthedRequest, re
 
       inventoryUpdates.push({ id: inv.id, newQty: inv.quantity - item.quantity });
     }
+
+    // Validate stock and build gift box line items
+    const giftBoxItemsToInsert: any[] = [];
+    for (const gb of giftBoxCartItems || []) {
+      const box = gb.gift_boxes as any;
+      const contents = gb.cart_gift_box_item_contents as any[];
+
+      const contentSnapshots: any[] = [];
+      for (const c of contents) {
+        const variant = c.product_variants as any;
+        const invRow = Array.isArray(variant.inventory) ? variant.inventory[0] : variant.inventory;
+        const neededQty = c.quantity * gb.quantity;
+
+        if (!invRow || invRow.quantity < neededQty) {
+          return res.status(400).json({
+            success: false,
+            error: `Insufficient stock for ${variant.products?.name || "an item"} in your gift box. Only ${invRow?.quantity ?? 0} left.`,
+          });
+        }
+
+        contentSnapshots.push({
+          variant_id: variant.id,
+          product_name: variant.products?.name || "",
+          variant_sku: variant.sku,
+          quantity: c.quantity,
+          unit_price: parseFloat(variant.price) || 0,
+        });
+
+        inventoryUpdates.push({ id: invRow.id, newQty: invRow.quantity - neededQty });
+      }
+
+      const unitPrice = parseFloat(box.base_price) || 0;
+      const totalPrice = parseFloat((unitPrice * gb.quantity).toFixed(2));
+      subtotal += totalPrice;
+
+      giftBoxItemsToInsert.push({
+        gift_box_id: box.id,
+        gift_box_name: box.name,
+        quantity: gb.quantity,
+        unit_price: unitPrice,
+        total_price: totalPrice,
+        contents: contentSnapshots,
+      });
+    }
+
+    // Shipping cost
 
     // Shipping cost
     const { data: shippingMethod } = await supabaseAdmin
@@ -810,9 +1037,29 @@ app.post("/api/checkout/place-order", requireAuth, async (req: AuthedRequest, re
     if (orderErr) throw orderErr;
 
     // Insert order items
+    // Insert order items
     const finalItems = orderItemsToInsert.map((i) => ({ ...i, order_id: order.id }));
-    const { error: itemsErr } = await supabaseAdmin.from("order_items").insert(finalItems);
-    if (itemsErr) throw itemsErr;
+    if (finalItems.length) {
+      const { error: itemsErr } = await supabaseAdmin.from("order_items").insert(finalItems);
+      if (itemsErr) throw itemsErr;
+    }
+
+    // Insert gift box order items + their content snapshots
+    for (const gb of giftBoxItemsToInsert) {
+      const { contents, ...gbRow } = gb;
+      const { data: insertedGb, error: gbErr } = await supabaseAdmin
+        .from("order_gift_box_items")
+        .insert({ ...gbRow, order_id: order.id })
+        .select("id")
+        .single();
+      if (gbErr) throw gbErr;
+
+      const contentRows = contents.map((c: any) => ({ ...c, order_gift_box_item_id: insertedGb.id }));
+      if (contentRows.length) {
+        const { error: cErr } = await supabaseAdmin.from("order_gift_box_item_contents").insert(contentRows);
+        if (cErr) throw cErr;
+      }
+    }
 
     // Initial status history
     await supabaseAdmin.from("order_status_history").insert({
@@ -845,7 +1092,13 @@ app.post("/api/checkout/place-order", requireAuth, async (req: AuthedRequest, re
     }
 
     // Clear cart
+    // Clear cart
     await supabaseAdmin.from("cart_items").delete().eq("cart_id", cartId);
+    const { data: gbCartRows } = await supabaseAdmin.from("cart_gift_box_items").select("id").eq("cart_id", cartId);
+    for (const row of gbCartRows || []) {
+      await supabaseAdmin.from("cart_gift_box_item_contents").delete().eq("cart_gift_box_item_id", row.id);
+    }
+    await supabaseAdmin.from("cart_gift_box_items").delete().eq("cart_id", cartId);
     await supabaseAdmin.from("carts").delete().eq("id", cartId);
 
     res.json({ success: true, orderId: order.id });
@@ -929,6 +1182,172 @@ app.get("/api/shipping-methods", async (_req: Request, res: Response) => {
   }
 });
 
+
+
+
+
+
+
+
+
+
+/* ─── GIFT BOXES (public) ─────────────────────────────────────────────────
+   is_customizable = true  -> "build your own": fixed base_price, customer
+     picks quantities freely from the eligible product list, no cap.
+   is_customizable = false -> "pre-made": fixed contents from
+     gift_box_products.default_quantity, customer just adds to cart as-is.
+   Either way the box charges base_price — individual product prices inside
+   are informational only, never summed into the total.
+───────────────────────────────────────────────────────────────────────── */
+
+app.get("/api/gift-boxes", async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("gift_boxes")
+      .select("*")
+      .eq("is_active", true)
+      .order("base_price");
+    if (error) throw error;
+    res.json({ success: true, giftBoxes: data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/gift-boxes/:slug", async (req: Request, res: Response) => {
+  try {
+    const { data: box, error } = await supabaseAdmin
+      .from("gift_boxes")
+      .select("*")
+      .eq("slug", req.params.slug)
+      .eq("is_active", true)
+      .single();
+
+    if (error || !box) return res.status(404).json({ success: false, error: "Gift box not found." });
+
+    const { data: eligible, error: prodErr } = await supabaseAdmin
+      .from("gift_box_products")
+      .select(
+        `
+        id, default_quantity, sort_order,
+        products (id, name, slug, product_images(url, is_primary)),
+        product_variants (id, sku, price, size, color, weight_grams, inventory(quantity))
+        `
+      )
+      .eq("gift_box_id", box.id)
+      .order("sort_order");
+
+    if (prodErr) throw prodErr;
+
+    // Normalize inventory (one-to-one relations come back as an object, not an array)
+    const shaped = (eligible || []).map((e: any) => {
+      const inv = e.product_variants?.inventory;
+      const qty = Array.isArray(inv) ? (inv[0]?.quantity ?? 0) : (inv?.quantity ?? 0);
+      return { ...e, product_variants: { ...e.product_variants, stock: qty } };
+    });
+
+    res.json({ success: true, giftBox: box, eligibleProducts: shaped });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ─── CART: GIFT BOX ITEMS ────────────────────────────────────────────────
+   body: { giftBoxId, quantity, contents: [{ variantId, quantity }] }
+   `contents` is required even for pre-made boxes — the frontend sends the
+   box's own default_quantity rows so contents are always explicit and
+   snapshot-able at checkout time.
+───────────────────────────────────────────────────────────────────────── */
+
+app.post("/api/cart/gift-box-items", async (req: AuthedRequest, res: Response) => {
+  try {
+    const sessionId = req.headers["x-session-id"] as string;
+    const authHeader = req.headers.authorization;
+    let userId: string | null = null;
+
+    if (authHeader?.startsWith("Bearer ")) {
+      const { data: { user } } = await supabasePublic.auth.getUser(authHeader.split(" ")[1]);
+      userId = user?.id ?? null;
+    }
+
+    const { giftBoxId, quantity = 1, contents } = req.body;
+    if (!giftBoxId || !Array.isArray(contents) || contents.length === 0) {
+      return res.status(400).json({ success: false, error: "giftBoxId and at least one content item are required." });
+    }
+
+    const { data: box } = await supabaseAdmin
+      .from("gift_boxes")
+      .select("id, is_active")
+      .eq("id", giftBoxId)
+      .single();
+    if (!box || !box.is_active) return res.status(404).json({ success: false, error: "Gift box not found." });
+
+    let cartId: string;
+    const cartMatch = userId
+      ? await supabaseAdmin.from("carts").select("id").eq("user_id", userId).single()
+      : await supabaseAdmin.from("carts").select("id").eq("session_id", sessionId).single();
+
+    if (cartMatch.data) {
+      cartId = cartMatch.data.id;
+    } else {
+      const { data: newCart, error: cartErr } = await supabaseAdmin
+        .from("carts")
+        .insert(userId ? { user_id: userId } : { session_id: sessionId })
+        .select("id")
+        .single();
+      if (cartErr) throw cartErr;
+      cartId = newCart.id;
+    }
+
+    const { data: cartGiftBoxItem, error: itemErr } = await supabaseAdmin
+      .from("cart_gift_box_items")
+      .insert({ cart_id: cartId, gift_box_id: giftBoxId, quantity })
+      .select("id")
+      .single();
+    if (itemErr) throw itemErr;
+
+    const contentRows = contents.map((c: any) => ({
+      cart_gift_box_item_id: cartGiftBoxItem.id,
+      variant_id: c.variantId,
+      quantity: c.quantity ?? 1,
+    }));
+    const { error: contentErr } = await supabaseAdmin.from("cart_gift_box_item_contents").insert(contentRows);
+    if (contentErr) throw contentErr;
+
+    res.json({ success: true, cartGiftBoxItemId: cartGiftBoxItem.id, message: "Gift box added to cart." });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.patch("/api/cart/gift-box-items/:itemId", async (req: Request, res: Response) => {
+  try {
+    const { quantity } = req.body;
+    if (!quantity || quantity < 1) return res.status(400).json({ success: false, error: "Quantity must be at least 1." });
+    const { error } = await supabaseAdmin.from("cart_gift_box_items").update({ quantity }).eq("id", req.params.itemId);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete("/api/cart/gift-box-items/:itemId", async (req: Request, res: Response) => {
+  try {
+    await supabaseAdmin.from("cart_gift_box_item_contents").delete().eq("cart_gift_box_item_id", req.params.itemId);
+    await supabaseAdmin.from("cart_gift_box_items").delete().eq("id", req.params.itemId);
+    res.json({ success: true, message: "Gift box removed." });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+
+
+
+
+
 /* ─── REVIEWS ────────────────────────────────────────────────────────────── */
 
 /**
@@ -937,42 +1356,25 @@ app.get("/api/shipping-methods", async (_req: Request, res: Response) => {
  */
 app.post("/api/reviews", requireAuth, async (req: AuthedRequest, res: Response) => {
   try {
-    const { productId, orderId, rating, title, comment } = req.body;
+    const { productId, orderId, rating, comment } = req.body;
 
     if (!productId || !rating) {
       return res.status(400).json({ success: false, error: "productId and rating are required." });
     }
 
-    // Step 1: Get all variant IDs for this product
-    const { data: variants } = await supabaseAdmin
-      .from("product_variants")
+    // Confirm the product actually exists (still worth checking — otherwise a
+    // bad productId silently creates an orphaned review row).
+    const { data: product } = await supabaseAdmin
+      .from("products")
       .select("id")
-      .eq("product_id", productId);
-
-    const variantIds = (variants || []).map((v: any) => v.id);
-
-    if (variantIds.length === 0) {
-      return res.status(403).json({ success: false, error: "Product not found." });
-    }
-
-    // Step 2: Find a delivered order from this user containing one of those variants
-    const { data: orderItem } = await supabaseAdmin
-      .from("order_items")
-      .select("id, orders!inner(id, user_id, status)")
-      .in("variant_id", variantIds)
-      .eq("orders.user_id", req.userId!)
-      .eq("orders.status", "delivered")
-      .limit(1)
+      .eq("id", productId)
       .maybeSingle();
 
-    if (!orderItem) {
-      return res.status(403).json({
-        success: false,
-        error: "You can only review products you have purchased and received.",
-      });
+    if (!product) {
+      return res.status(404).json({ success: false, error: "Product not found." });
     }
 
-    // Check for duplicate review
+    // One review per user per product, regardless of purchase history.
     const { data: existing } = await supabaseAdmin
       .from("reviews")
       .select("id")
@@ -991,9 +1393,9 @@ app.post("/api/reviews", requireAuth, async (req: AuthedRequest, res: Response) 
         user_id: req.userId!,
         order_id: orderId || null,
         rating,
-        title: title || null,
+        title: null, // titles removed — comment-only reviews now
         comment: comment || null,
-        is_verified: true,
+        is_verified: false,
       })
       .select("id")
       .single();
@@ -1004,6 +1406,28 @@ app.post("/api/reviews", requireAuth, async (req: AuthedRequest, res: Response) 
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* ─── WISHLIST ───────────────────────────────────────────────────────────── */
 
@@ -1332,6 +1756,146 @@ app.get("/api/debug/products", async (_req, res) => {
 
 
 
+
+
+
+/* ─── ADMIN: GIFT BOXES ──────────────────────────────────────────────────── */
+
+app.get("/api/admin/gift-boxes", requireAuth, requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin.from("gift_boxes").select("*").order("created_at", { ascending: false });
+    if (error) throw error;
+    res.json({ success: true, giftBoxes: data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/admin/gift-boxes", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { name, slug, description, image_url, base_price, capacity, is_customizable, is_active } = req.body;
+    if (!name || !slug || base_price === undefined) {
+      return res.status(400).json({ success: false, error: "name, slug, and base_price are required." });
+    }
+    const { data, error } = await supabaseAdmin
+      .from("gift_boxes")
+      .insert({
+        name, slug,
+        description: description || null,
+        image_url: image_url || null,
+        base_price,
+        capacity: capacity || null,
+        is_customizable: is_customizable ?? true,
+        is_active: is_active ?? true,
+      })
+      .select()
+      .single();
+    if (error) {
+      if (error.code === "23505") return res.status(409).json({ success: false, error: `Slug "${slug}" is already in use.` });
+      throw error;
+    }
+    res.json({ success: true, giftBox: data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.patch("/api/admin/gift-boxes/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { name, slug, description, image_url, base_price, capacity, is_customizable, is_active } = req.body;
+    const { error } = await supabaseAdmin
+      .from("gift_boxes")
+      .update({ name, slug, description, image_url, base_price, capacity, is_customizable, is_active, updated_at: new Date().toISOString() })
+      .eq("id", req.params.id);
+    if (error) {
+      if (error.code === "23505") return res.status(409).json({ success: false, error: `Slug "${slug}" is already in use.` });
+      throw error;
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete("/api/admin/gift-boxes/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabaseAdmin.from("gift_boxes").delete().eq("id", req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* ─── ADMIN: GIFT BOX ELIGIBLE PRODUCTS ──────────────────────────────────── */
+
+app.get("/api/admin/gift-boxes/:id/products", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("gift_box_products")
+      .select(
+        `
+        id, default_quantity, sort_order, product_id, variant_id,
+        products (id, name),
+        product_variants (id, sku, price, size, color, weight_grams)
+        `
+      )
+      .eq("gift_box_id", req.params.id)
+      .order("sort_order");
+    if (error) throw error;
+    res.json({ success: true, products: data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/admin/gift-boxes/:id/products", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { product_id, variant_id, default_quantity, sort_order } = req.body;
+    if (!product_id || !variant_id) return res.status(400).json({ success: false, error: "product_id and variant_id are required." });
+    const { data, error } = await supabaseAdmin
+      .from("gift_box_products")
+      .insert({
+        gift_box_id: req.params.id,
+        product_id, variant_id,
+        default_quantity: default_quantity ?? 0,
+        sort_order: sort_order ?? 0,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    res.json({ success: true, giftBoxProduct: data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.patch("/api/admin/gift-boxes/:id/products/:linkId", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { default_quantity, sort_order } = req.body;
+    const { error } = await supabaseAdmin
+      .from("gift_box_products")
+      .update({ default_quantity, sort_order })
+      .eq("id", req.params.linkId);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete("/api/admin/gift-boxes/:id/products/:linkId", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabaseAdmin.from("gift_box_products").delete().eq("id", req.params.linkId);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+
 /* ─── ADMIN: PRODUCTS ────────────────────────────────────────────────────── */
 
 app.get("/api/admin/products", requireAuth, requireAdmin, async (req: Request, res: Response) => {
@@ -1341,7 +1905,7 @@ app.get("/api/admin/products", requireAuth, requireAdmin, async (req: Request, r
 
     let query = supabaseAdmin
       .from("products")
-      .select("id, name, slug, brand, is_active, categories(name), product_variants(id, sku, price)", { count: "exact" });
+      .select("id, name, name_ar, slug, brand, is_active, sold_by_weight, categories(name), product_variants(id, sku, price)", { count: "exact" });
 
     if (search) query = query.ilike("name", `%${search}%`);
 
@@ -1358,11 +1922,21 @@ app.get("/api/admin/products", requireAuth, requireAdmin, async (req: Request, r
 
 app.post("/api/admin/products", requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { name, slug, description, category_id, brand, variants, images } = req.body;
+    const { name, name_ar, slug, description, description_ar, category_id, brand, sold_by_weight, variants, images } = req.body;
 
     const { data: product, error: prodErr } = await supabaseAdmin
       .from("products")
-      .insert({ name, slug, description, category_id, brand, is_active: true })
+      .insert({
+        name,
+        name_ar: name_ar || null,
+        slug,
+        description,
+        description_ar: description_ar || null,
+        category_id,
+        brand,
+        is_active: true,
+        sold_by_weight: !!sold_by_weight,
+      })
       .select("id")
       .single();
 
@@ -1373,11 +1947,18 @@ app.post("/api/admin/products", requireAuth, requireAdmin, async (req: Request, 
       throw prodErr;
     }
 
-    // Insert variants and inventory
     for (const v of variants || []) {
       const { data: variant, error: varErr } = await supabaseAdmin
         .from("product_variants")
-        .insert({ product_id: product.id, sku: v.sku, size: v.size, color: v.color, price: v.price, compare_at_price: v.compare_at_price })
+        .insert({
+          product_id: product.id,
+          sku: v.sku,
+          size: v.size,
+          color: v.color,
+          price: v.price,
+          compare_at_price: v.compare_at_price,
+          weight_grams: v.weight_grams ?? null,
+        })
         .select("id")
         .single();
 
@@ -1390,7 +1971,6 @@ app.post("/api/admin/products", requireAuth, requireAdmin, async (req: Request, 
       });
     }
 
-    // Insert images
     for (const img of images || []) {
       await supabaseAdmin.from("product_images").insert({
         product_id: product.id,
@@ -1409,16 +1989,21 @@ app.post("/api/admin/products", requireAuth, requireAdmin, async (req: Request, 
 
 app.patch("/api/admin/products/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { name, slug, description, category_id, brand, is_active, is_featured, is_best_seller } = req.body;
+    const { name, name_ar, slug, description, description_ar, category_id, brand, is_active, is_featured, is_best_seller, sold_by_weight } = req.body;
 
     const { error } = await supabaseAdmin
       .from("products")
       .update({
-        name, slug, description,
+        name,
+        name_ar: name_ar || null,
+        slug,
+        description,
+        description_ar: description_ar || null,
         category_id: category_id || null,
         brand, is_active,
         is_featured: is_featured ?? false,
         is_best_seller: is_best_seller ?? false,
+        sold_by_weight: sold_by_weight ?? false,
       })
       .eq("id", req.params.id);
 
@@ -1452,15 +2037,30 @@ app.delete("/api/admin/products/:id", requireAuth, requireAdmin, async (req: Req
 
 app.post("/api/admin/categories", requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { name, slug, parent_id, image_url } = req.body;
+    const { name, name_ar, slug, parent_id, image_url } = req.body;
     const { data, error } = await supabaseAdmin
       .from("categories")
-      .insert({ name, slug, parent_id: parent_id || null, image_url })
+      .insert({ name, name_ar: name_ar || null, slug, parent_id: parent_id || null, image_url })
       .select()
       .single();
 
     if (error) throw error;
     res.json({ success: true, category: data });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.patch("/api/admin/categories/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { name, name_ar, slug, parent_id, image_url } = req.body;
+    const { error } = await supabaseAdmin
+      .from("categories")
+      .update({ name, name_ar: name_ar || null, slug, parent_id: parent_id || null, image_url })
+      .eq("id", req.params.id);
+
+    if (error) throw error;
+    res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -1641,7 +2241,7 @@ app.get("/api/admin/inventory", requireAuth, requireAdmin, async (req: Request, 
 
     let query = supabaseAdmin
       .from("inventory")
-      .select("id, quantity, low_stock_threshold, product_variants(id, sku, size, color, products(name))");
+      .select("id, quantity, low_stock_threshold, product_variants(id, sku, size, color, products(name, sold_by_weight))");
 
     if (lowStock === "true") {
       query = query.filter("quantity", "lte", "low_stock_threshold");
@@ -1942,7 +2542,7 @@ app.get("/api/admin/products/:id", requireAuth, requireAdmin, async (req: Reques
       .select(
         `
         *,
-        categories (id, name, slug),
+        categories (id, name, name_ar, slug),
         product_images (id, url, alt_text, is_primary, sort_order),
         product_variants (
           id, sku, size, color, price, compare_at_price,
@@ -1966,21 +2566,31 @@ app.get("/api/admin/products/:id", requireAuth, requireAdmin, async (req: Reques
 
 
 
-
-
-
-
-
 app.post("/api/admin/products/:id/variants", requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { sku, size, color, price, compare_at_price, stock = 0, low_stock_threshold = 5 } = req.body;
-    if (!sku?.trim() || price === undefined) {
-      return res.status(400).json({ success: false, error: "sku and price are required." });
+    const {
+      sku, size, color, weight_grams,
+      price, compare_at_price,
+      stock = 0,
+      low_stock_threshold = 5,
+    } = req.body;
+
+    if (!sku?.trim()) {
+      return res.status(400).json({ success: false, error: "sku is required." });
+    }
+    if (price === undefined || price === null || price === "") {
+      return res.status(400).json({ success: false, error: "price is required." });
     }
 
     const { data: variant, error } = await supabaseAdmin
       .from("product_variants")
-      .insert({ product_id: req.params.id, sku, size, color, price, compare_at_price })
+      .insert({
+        product_id: req.params.id,
+        sku, size, color,
+        weight_grams: weight_grams ? Number(weight_grams) : null,
+        price,
+        compare_at_price,
+      })
       .select("id")
       .single();
 
@@ -2038,18 +2648,22 @@ app.post("/api/admin/products/:id/variants", requireAuth, requireAdmin, async (r
 
 
 
-
-
-
-
-
 app.patch("/api/admin/products/:id/variants/:variantId", requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { sku, size, color, price, compare_at_price, stock, low_stock_threshold } = req.body;
+    const {
+      sku, size, color, weight_grams,
+      price, compare_at_price,
+      stock,
+      low_stock_threshold,
+    } = req.body;
 
     const { error: varErr } = await supabaseAdmin
       .from("product_variants")
-      .update({ sku, size, color, price, compare_at_price })
+      .update({
+        sku, size, color,
+        weight_grams: weight_grams !== undefined ? (weight_grams ? Number(weight_grams) : null) : undefined,
+        price, compare_at_price,
+      })
       .eq("id", req.params.variantId);
 
     if (varErr) {
@@ -2071,8 +2685,6 @@ app.patch("/api/admin/products/:id/variants/:variantId", requireAuth, requireAdm
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
-
 
 
 
@@ -2386,17 +2998,6 @@ async function calculateOrderTotal(
     total: parseFloat(total.toFixed(2)),
   };
 }
-// ─── HELPER FUNCTIONS ──────────────────────────────────────────────────────
-// Drop-in replacement for shapeProduct() in server.ts.
-// Adds two new fields consumed by ProductCard:
-//   defaultVariantId  — cheapest in-stock variant (or cheapest overall as fallback)
-//   variantCount      — total number of variants for the product
-
-// ─── HELPER FUNCTIONS ──────────────────────────────────────────────────────
-// Drop-in replacement for shapeProduct() in server.ts.
-// Adds two new fields consumed by ProductCard:
-//   defaultVariantId  — cheapest in-stock variant (or cheapest overall as fallback)
-//   variantCount      — total number of variants for the product
 
 function shapeProduct(p: any) {
   const primaryImage =
@@ -2404,41 +3005,48 @@ function shapeProduct(p: any) {
     p.product_images?.[0];
 
   const variants: any[] = p.product_variants || [];
+  const soldByWeight: boolean = !!p.sold_by_weight;
 
-  // Prices & compare prices
+  const getVariantQty = (v: any) =>
+    Array.isArray(v.inventory) ? (v.inventory[0]?.quantity ?? 0) : (v.inventory?.quantity ?? 0);
+
   const prices = variants.map((v: any) => parseFloat(v.price));
   const minPrice = prices.length ? Math.min(...prices) : 0;
-  const maxCompare = variants.map((v: any) =>
-    parseFloat(v.compare_at_price || 0)
-  );
+  const maxCompare = variants.map((v: any) => parseFloat(v.compare_at_price || 0));
 
-  // Ratings
   const ratings = (p.reviews || []).map((r: any) => r.rating);
   const avgRating = ratings.length
     ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length
     : 0;
 
-  // Stock
-  const totalStock = variants.reduce((sum: number, v: any) => {
-    return sum + (v.inventory?.[0]?.quantity || 0);
-  }, 0);
+  const totalStock = variants.reduce((sum: number, v: any) => sum + getVariantQty(v), 0);
 
-  // Default variant — cheapest with stock first, fall back to overall cheapest
-  const inStockVariants = variants.filter(
-    (v: any) => (v.inventory?.[0]?.quantity ?? 0) > 0
-  );
+  const inStockVariants = variants.filter((v: any) => getVariantQty(v) > 0);
+
   const pickFrom = inStockVariants.length > 0 ? inStockVariants : variants;
   const cheapestVariant = pickFrom.reduce(
     (min: any, v: any) =>
       !min || parseFloat(v.price) < parseFloat(min.price) ? v : min,
     null
   );
+
   return {
     id: p.id,
     name: p.name,
+    name_en: p.name,
+    name_ar: p.name_ar || p.name, // falls back to English if not yet translated
+    description: p.description,
+    description_en: p.description,
+    description_ar: p.description_ar || p.description,
     slug: p.slug,
     brand: p.brand,
-    category: p.categories,
+    category: p.categories
+      ? {
+        ...p.categories,
+        name_en: p.categories.name,
+        name_ar: p.categories.name_ar || p.categories.name,
+      }
+      : null,
     image: primaryImage,
     price: minPrice,
     compareAtPrice: maxCompare.length ? Math.max(...maxCompare) : 0,
@@ -2447,10 +3055,26 @@ function shapeProduct(p: any) {
     inStock: totalStock > 0,
     defaultVariantId: cheapestVariant?.id ?? null,
     variantCount: variants.length,
-    is_featured: p.is_featured ?? false,       // ← add
-    is_best_seller: p.is_best_seller ?? false, // ← add
+    is_featured: p.is_featured ?? false,
+    is_best_seller: p.is_best_seller ?? false,
+    sold_by_weight: soldByWeight,
   };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function sortProducts(products: any[], sort: string) {
   switch (sort) {
     case "price_asc":
@@ -2474,7 +3098,7 @@ function sortProducts(products: any[], sort: string) {
 /* ─── SERVER START ───────────────────────────────────────────────────────── */
 
 app.listen(PORT, () => {
-  console.log(`🚀 Sabagh Group backend running on http://localhost:${PORT}`);
+  console.log(`🚀 NUTX  backend running on http://localhost:${PORT}`);
 });
 
 export default app;

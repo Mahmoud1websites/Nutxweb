@@ -2,6 +2,8 @@ import { ArrowRight, Eye, EyeOff, Lock, Mail, User, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router";
 import { supabase } from "../config/supabaseClient";
+import { useLanguage } from "../i18n/LanguageContext";
+const image = new URL("../../assets/back2.jpg.png", import.meta.url).href;
 
 function GoogleIcon() {
   return (
@@ -19,6 +21,7 @@ export default function SignUp() {
   const location = useLocation();
   const message = location.state?.message;
   const from = location.state?.from || "/";
+  const { t } = useLanguage();
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -33,11 +36,11 @@ export default function SignUp() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!fullName.trim()) return setError("Please enter your full name.");
-    if (!email.includes("@")) return setError("Enter a valid email address.");
-    if (password.length < 6) return setError("Password must be at least 6 characters.");
-    if (password !== confirm) return setError("Passwords do not match.");
-    if (!agreed) return setError("You must agree to the terms to continue.");
+    if (!fullName.trim()) return setError(t("signup_name_required"));
+    if (!email.includes("@")) return setError(t("auth_invalid_email"));
+    if (password.length < 6) return setError(t("signin_min_password_error"));
+    if (password !== confirm) return setError(t("signup_passwords_mismatch"));
+    if (!agreed) return setError(t("signup_agree_required"));
 
     setLoading(true);
     try {
@@ -48,18 +51,16 @@ export default function SignUp() {
       });
       if (error) { setError(error.message); return; }
 
-      // If email confirmation is required
       if (data.user && !data.session) {
         navigate("/login", {
-          state: { message: "Check your email to confirm your account before signing in." },
+          state: { message: t("signup_confirm_email_msg") },
           replace: true
         });
       } else {
-        // Email confirmation disabled — user is immediately logged in
         navigate(from, { replace: true });
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError(t("auth_error_generic"));
     } finally {
       setLoading(false);
     }
@@ -71,7 +72,7 @@ export default function SignUp() {
         type="button"
         onClick={() => navigate("/")}
         className="absolute top-4 right-4 z-50 p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full transition-colors border border-border bg-background"
-        aria-label="Close"
+        aria-label={t("auth_close_aria")}
       >
         <X className="w-5 h-5" />
       </button>
@@ -80,54 +81,63 @@ export default function SignUp() {
       <div className="hidden lg:flex flex-col relative overflow-hidden bg-card border-r border-border">
         <div className="absolute inset-0">
           <img
-            src="https://images.unsplash.com/photo-1544636331-e26879cd4d9b?w=900&h=1200&fit=crop&auto=format&q=85"
-            alt="Garage Hub"
+            src={image}
+            alt="NUTX"
             className="w-full h-full object-cover opacity-40"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/20" />
         </div>
         <div className="relative flex flex-col justify-between h-full p-10">
           <Link to="/" className="flex items-center gap-2 w-fit">
-            <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center">
-              <span className="text-white font-black text-sm">GH</span>
+            <div className="w-9 h-9 bg-primary rounded-full flex items-center justify-center">
+              <span className="text-white font-black text-sm">NX</span>
             </div>
-            <span className="font-black text-lg text-foreground">Garage Hub</span>
+            <span
+              className="text-lg text-foreground"
+              style={{ fontFamily: "'Fraunces', serif", fontWeight: 700 }}
+            >
+              NUTX
+            </span>
           </Link>
           <div className="flex flex-col gap-4">
             <div className="h-px w-10 bg-primary" />
             <h2 className="text-4xl font-black text-foreground leading-tight">
-              Join Lebanon's #1<br />
-              <span className="text-primary">car accessories store.</span>
+              {t("signup_hero_title_1")}<br />
+              <span className="text-primary">{t("signup_hero_title_2")}</span>
             </h2>
             <p className="text-muted-foreground text-sm max-w-xs leading-relaxed">
-              Create your free account and get access to exclusive deals, order tracking,
-              and a wishlist for all your car upgrade plans.
+              {t("signup_hero_desc")}
             </p>
           </div>
           <p className="text-xs text-muted-foreground/50">
-            © {new Date().getFullYear()} Garage Hub. All rights reserved.
+            © {new Date().getFullYear()} NUTX. {t("footer_rights")}
           </p>
         </div>
       </div>
 
-
-      {message && (
-        <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-sm text-green-600 font-medium">
-          {message}
-        </div>
-      )}
       {/* RIGHT — Form */}
       <div className="flex flex-col items-center justify-center px-6 py-12 bg-background">
         <div className="w-full max-w-sm">
           <Link to="/" className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-white font-black text-xs">GH</span>
+            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+              <span className="text-white font-black text-xs">NX</span>
             </div>
-            <span className="font-black text-base text-foreground">Garage Hub</span>
+            <span
+              className="text-base text-foreground"
+              style={{ fontFamily: "'Fraunces', serif", fontWeight: 700 }}
+            >
+              NUTX
+            </span>
           </Link>
 
-          <h1 className="text-2xl font-black text-foreground mb-1">Create your account</h1>
-          <p className="text-sm text-muted-foreground mb-7">Free to join. Takes less than a minute.</p>
+          <h1 className="text-2xl font-black text-foreground mb-1">{t("signup_title")}</h1>
+          <p className="text-sm text-muted-foreground mb-7">{t("signup_subtitle")}</p>
+
+          {message && (
+            <div className="mb-5 p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-sm text-green-600 font-medium">
+              {message}
+            </div>
+          )}
 
           <button
             type="button"
@@ -140,25 +150,25 @@ export default function SignUp() {
             }}
             className="w-full flex items-center justify-center gap-2.5 border border-border bg-card hover:bg-muted text-foreground font-semibold py-2.5 rounded-xl text-sm transition-colors mb-5"
           >
-            <GoogleIcon /> Continue with Google
+            <GoogleIcon /> {t("auth_google")}
           </button>
 
           <div className="flex items-center gap-3 mb-5">
             <div className="flex-1 h-px bg-border" />
-            <span className="text-xs text-muted-foreground font-medium">or sign up</span>
+            <span className="text-xs text-muted-foreground font-medium">{t("signup_or")}</span>
             <div className="flex-1 h-px bg-border" />
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-foreground uppercase tracking-wider">Full name</label>
+              <label className="text-xs font-bold text-foreground uppercase tracking-wider">{t("signup_full_name")}</label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Ahmad Sabagh"
+                  placeholder={t("signup_full_name_placeholder")}
                   required
                   className="w-full pl-9 pr-4 py-2.5 bg-muted rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
                 />
@@ -166,14 +176,14 @@ export default function SignUp() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-foreground uppercase tracking-wider">Email address</label>
+              <label className="text-xs font-bold text-foreground uppercase tracking-wider">{t("auth_email_label")}</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  placeholder={t("auth_email_placeholder")}
                   required
                   className="w-full pl-9 pr-4 py-2.5 bg-muted rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
                 />
@@ -181,14 +191,14 @@ export default function SignUp() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-foreground uppercase tracking-wider">Password</label>
+              <label className="text-xs font-bold text-foreground uppercase tracking-wider">{t("auth_password_label")}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type={showPw ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Min. 6 characters"
+                  placeholder={t("signup_password_placeholder")}
                   required
                   className="w-full pl-9 pr-10 py-2.5 bg-muted rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
                 />
@@ -199,14 +209,14 @@ export default function SignUp() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-foreground uppercase tracking-wider">Confirm password</label>
+              <label className="text-xs font-bold text-foreground uppercase tracking-wider">{t("signup_confirm_password")}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type={showCf ? "text" : "password"}
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
-                  placeholder="Repeat password"
+                  placeholder={t("signup_confirm_placeholder")}
                   required
                   className="w-full pl-9 pr-10 py-2.5 bg-muted rounded-xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all"
                 />
@@ -223,7 +233,7 @@ export default function SignUp() {
                 onChange={(e) => setAgreed(e.target.checked)}
                 className="mt-0.5 accent-primary w-4 h-4"
               />
-              <span className="text-xs text-muted-foreground">I agree to the Terms and Privacy Policy</span>
+              <span className="text-xs text-muted-foreground">{t("signup_agree_terms")}</span>
             </label>
 
             <div className="min-h-[16px]">
@@ -235,13 +245,13 @@ export default function SignUp() {
               disabled={loading}
               className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-bold py-3 rounded-xl hover:bg-primary/90 transition-all hover:gap-3 text-sm disabled:opacity-60"
             >
-              {loading ? "Creating account…" : <> Create Account <ArrowRight className="w-4 h-4" /> </>}
+              {loading ? t("signup_button_loading") : <> {t("signup_button")} <ArrowRight className="w-4 h-4" /> </>}
             </button>
           </form>
 
           <p className="text-center text-xs text-muted-foreground mt-7">
-            Already have an account?{" "}
-            <Link to="/login" className="text-primary font-bold hover:underline">Sign in</Link>
+            {t("signup_have_account")}{" "}
+            <Link to="/login" className="text-primary font-bold hover:underline">{t("signup_sign_in")}</Link>
           </p>
         </div>
       </div>

@@ -12,21 +12,22 @@ import {
   Check,
   Truck,
   Shield,
+  Loader2,
 } from "lucide-react";
-
-const VALID_COUPONS: Record<string, { rate: number; label: string }> = {
-  SAVE10:    { rate: 0.10, label: "10% off your order" },
-  WELCOME20: { rate: 0.20, label: "20% off your order" },
-  FLASH15:   { rate: 0.15, label: "15% off your order" },
-};
+import { supabase } from "../config/supabaseClient";
 
 export default function Cart() {
-  const { state, dispatch, cartSubtotal, cartTotal, discount, user, products } = useStore();
-  const navigate  = useNavigate();
-  const location  = useLocation();
+  const {
+    state, dispatch, cartSubtotal, cartTotal, discount, user, products,
+    syncUpdateQuantity, syncRemoveFromCart,
+    syncUpdateGiftBoxQuantity, syncRemoveGiftBoxItem,
+  } = useStore();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [couponInput, setCouponInput] = useState("");
   const [couponError, setCouponError] = useState("");
+  const [couponLoading, setCouponLoading] = useState(false);
 
   const isAuthenticated = !!user;
 
@@ -48,33 +49,62 @@ export default function Cart() {
         product,
         variant,
         price,
-        // ✅ prefer slug already on the CartItem (set by fetchLiveCart),
-        //    fall back to the shaped product from dbProducts
-        slug:         item.slug ?? product?.slug ?? null,
-        name:         product?.name ?? "Unknown Product",
-        image:        product?.image?.url ?? product?.images?.[0] ?? "",
+        slug: item.slug ?? product?.slug ?? null,
+        name: product?.name ?? "Unknown Product",
+        image: product?.image?.url ?? product?.images?.[0] ?? "",
         variantLabel: variant?.label,
       };
     });
   }, [state.cart, products]);
 
   const afterDiscount = cartSubtotal - discount;
-  const shippingFee   = cartSubtotal > 0 && afterDiscount < 75 ? 9.99 : 0;
+  const shippingFee = cartSubtotal > 0 && afterDiscount < 75 ? 9.99 : 0;
 
-  function handleApplyCoupon() {
-    const code  = couponInput.trim().toUpperCase();
-    const match = VALID_COUPONS[code];
-    if (match) {
-      dispatch({ type: "SET_COUPON", code });
-      setCouponError("");
+  async function handleApplyCoupon() {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) return;
+
+    if (!isAuthenticated) {
+      setCouponError("Please log in to apply a coupon.");
+      return;
+    }
+
+    setCouponLoading(true);
+    setCouponError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
+
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ code, orderSubtotal: cartSubtotal }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setCouponError(data.error || "Invalid coupon code.");
+        return;
+      }
+
+      const rate = data.coupon.discountType === "percentage"
+        ? data.coupon.discountValue / 100
+        : data.coupon.discountValue / cartSubtotal;
+
+      dispatch({ type: "SET_COUPON", code: data.coupon.code, rate, couponId: data.coupon.id });
       setCouponInput("");
-    } else {
-      setCouponError("Invalid coupon code. Try WELCOME20.");
+    } catch {
+      setCouponError("Failed to validate coupon. Please try again.");
+    } finally {
+      setCouponLoading(false);
     }
   }
 
   function handleRemoveCoupon() {
-    dispatch({ type: "SET_COUPON", code: null });
+    dispatch({ type: "SET_COUPON", code: null, rate: 0, couponId: null });
     setCouponError("");
   }
 
@@ -86,7 +116,9 @@ export default function Cart() {
     }
   }
 
-  if (resolvedItems.length === 0) {
+  const giftBoxItems = state.giftBoxCart || [];
+
+  if (resolvedItems.length === 0 && giftBoxItems.length === 0) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center px-4 text-center gap-6">
         <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center">
@@ -114,7 +146,7 @@ export default function Cart() {
         <h1 className="text-3xl font-black text-foreground tracking-tight">
           Shopping Cart
           <span className="ml-3 text-lg font-semibold text-muted-foreground">
-            ({(state.cart || []).reduce((t, i) => t + i.quantity, 0)} items)
+            ({(state.cart || []).reduce((t, i) => t + i.quantity, 0) + giftBoxItems.reduce((t, i) => t + i.quantity, 0)} items)
           </span>
         </h1>
       </div>
@@ -145,7 +177,6 @@ export default function Cart() {
           )}
 
           {resolvedItems.map((item) => {
-            // ✅ use slug for the link, fall back gracefully
             const productHref = item.slug
               ? `/products/${item.slug}`
               : "/products";
@@ -188,11 +219,7 @@ export default function Cart() {
                     <button
                       type="button"
                       onClick={() =>
-                        dispatch({
-                          type: "REMOVE_FROM_CART",
-                          productId: item.productId,
-                          variantId: item.variantId,
-                        })
+                        syncRemoveFromCart(item.productId, item.variantId, item.itemId)
                       }
                       className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 p-1"
                       aria-label="Remove item"
@@ -207,12 +234,12 @@ export default function Cart() {
                         type="button"
                         disabled={item.quantity <= 1}
                         onClick={() =>
-                          dispatch({
-                            type: "UPDATE_QUANTITY",
-                            productId: item.productId,
-                            variantId: item.variantId,
-                            quantity: item.quantity - 1,
-                          })
+                          syncUpdateQuantity(
+                            item.productId,
+                            item.quantity - 1,
+                            item.variantId,
+                            item.itemId
+                          )
                         }
                         className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
                       >
@@ -224,12 +251,12 @@ export default function Cart() {
                       <button
                         type="button"
                         onClick={() =>
-                          dispatch({
-                            type: "UPDATE_QUANTITY",
-                            productId: item.productId,
-                            variantId: item.variantId,
-                            quantity: item.quantity + 1,
-                          })
+                          syncUpdateQuantity(
+                            item.productId,
+                            item.quantity + 1,
+                            item.variantId,
+                            item.itemId
+                          )
                         }
                         className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                       >
@@ -250,6 +277,86 @@ export default function Cart() {
               </div>
             );
           })}
+
+          {giftBoxItems.map((box) => (
+            <div
+              key={box.itemId}
+              className="rounded-2xl border border-border bg-card p-4 sm:p-5 flex gap-4 items-start shadow-sm"
+            >
+              <Link to={box.slug ? `/gift-boxes/${box.slug}` : "/gift-boxes"} className="shrink-0">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-muted border border-border">
+                  {box.image ? (
+                    <img src={box.image} alt={box.name} className="w-full h-full object-cover" loading="lazy" />
+                  ) : (
+                    <div className="w-full h-full bg-muted flex items-center justify-center">
+                      <ShoppingCart className="w-6 h-6 text-muted-foreground/30" />
+                    </div>
+                  )}
+                </div>
+              </Link>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full mb-1">
+                      Gift Box
+                    </span>
+                    <Link
+                      to={box.slug ? `/gift-boxes/${box.slug}` : "/gift-boxes"}
+                      className="block font-bold text-foreground text-sm hover:text-primary transition-colors line-clamp-2"
+                    >
+                      {box.name}
+                    </Link>
+                    {box.contents.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                        {box.contents.map((c) => `${c.productName ?? "Item"} ×${c.quantity}`).join(", ")}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => syncRemoveGiftBoxItem(box.itemId)}
+                    className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 p-1"
+                    aria-label="Remove gift box"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between mt-4">
+                  <div className="flex items-center gap-1 border border-border rounded-xl bg-muted/50 overflow-hidden">
+                    <button
+                      type="button"
+                      disabled={box.quantity <= 1}
+                      onClick={() => syncUpdateGiftBoxQuantity(box.itemId, box.quantity - 1)}
+                      className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="w-8 text-center text-sm font-bold text-foreground tabular-nums">
+                      {box.quantity}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => syncUpdateGiftBoxQuantity(box.itemId, box.quantity + 1)}
+                      className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="font-black text-foreground text-base">
+                      ${(box.basePrice * box.quantity).toFixed(2)}
+                    </p>
+                    {box.quantity > 1 && (
+                      <p className="text-xs text-muted-foreground">${box.basePrice.toFixed(2)} each</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
 
           <Link
             to="/products"
@@ -278,15 +385,11 @@ export default function Cart() {
                       {state.coupon}
                     </p>
                     <p className="text-xs text-emerald-600 dark:text-emerald-500">
-                      {VALID_COUPONS[state.coupon]?.label}
+                      Applied — saving ${discount.toFixed(2)}
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleRemoveCoupon}
-                  className="text-muted-foreground hover:text-red-500 transition-colors p-1"
-                >
+                <button type="button" onClick={handleRemoveCoupon} className="text-muted-foreground hover:text-red-500 transition-colors p-1">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -303,8 +406,10 @@ export default function Cart() {
                 <button
                   type="button"
                   onClick={handleApplyCoupon}
-                  className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-xl hover:bg-primary/90 transition-colors"
+                  disabled={couponLoading || !couponInput.trim()}
+                  className="px-4 py-2 bg-primary text-primary-foreground text-sm font-bold rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
                 >
+                  {couponLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                   Apply
                 </button>
               </div>
