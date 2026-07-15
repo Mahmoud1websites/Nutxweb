@@ -23,7 +23,7 @@ import { useNavigate } from "react-router";
 import { useStore } from "../store";
 import { toast } from "sonner";
 
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE || "http://localhost:5000/api";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/10 text-yellow-600 border-yellow-200",

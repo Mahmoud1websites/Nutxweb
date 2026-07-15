@@ -18,7 +18,7 @@ import { useStore } from "../store";
 import { useLanguage } from "../i18n/LanguageContext";
 
 // Replace with your real API Base URL
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE || "http://localhost:5000/api";
 
 interface Category {
   id: string;
