@@ -116,6 +116,14 @@ export default function ProductCard({ product }: Props) {
         </div>
       </div>
 
+
+
+
+
+
+
+
+
       {/* Info */}
       <div className="flex flex-col gap-2 p-4">
         <p className="text-xs font-medium text-primary uppercase tracking-wider">
@@ -146,17 +154,7 @@ export default function ProductCard({ product }: Props) {
           </span>
         </div>
 
-        {/* Price */}
-        <div className="flex items-center gap-2 mt-auto pt-1">
-          <span className="font-bold text-foreground">
-            ${product.price.toFixed(2)}
-          </span>
-          {hasDiscount && (
-            <span className="text-sm text-muted-foreground line-through">
-              ${product.compareAtPrice!.toFixed(2)}
-            </span>
-          )}
-        </div>
+       
       </div>
     </Link>
   );

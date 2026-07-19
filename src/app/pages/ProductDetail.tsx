@@ -461,31 +461,7 @@ export default function ProductDetail() {
             </div>
           )}
 
-          {/* Quantity stepper */}
-          <div>
-            <p className="text-sm font-semibold text-foreground mb-2">{t("pd_quantity")}</p>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                disabled={quantity <= 1}
-                className="w-9 h-9 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Minus className="w-4 h-4" />
-              </button>
-              <span className="w-8 text-center font-semibold text-foreground">{quantity}</span>
-              <button
-                onClick={() => setQuantity(q => Math.min(stock, q + 1))}
-                disabled={quantity >= stock}
-                className="w-9 h-9 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-            {inStock && !quantityAvailable && (
-              <p className="text-xs text-red-500 mt-2">{t("pd_only_left").replace("{n}", String(stock))}</p>
-            )}
-          </div>
-
+        
           {/* Action buttons */}
           <div className="flex flex-col sm:flex-row gap-3">
             <button
